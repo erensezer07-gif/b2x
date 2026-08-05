@@ -1,0 +1,62 @@
+# --- Ortam ve gizli bilgiler ---
+.env
+.env.local
+*.pem
+*.key
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# --- Flutter / Dart ---
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/.pub-cache/
+app/.pub/
+app/ios/Pods/
+app/ios/.symlinks/
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/Flutter.podspec
+app/android/.gradle/
+app/android/local.properties
+app/android/key.properties
+app/android/app/debug/
+app/android/app/profile/
+app/android/app/release/
+*.iml
+*.jks
+*.keystore
+
+# --- Yerel dosya depolama (MVP'de profil fotoğrafları) ---
+storage/
+uploads/
+
+# --- IDE ---
+.idea/
+.vscode/
+*.swp
+
+# --- Claude Code (kişisel yerel ayarlar, paylaşılmaz) ---
+.claude/settings.local.json
+
+# --- İşletim sistemi ---
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# --- Loglar ve geçici ---
+*.log
+tmp/
