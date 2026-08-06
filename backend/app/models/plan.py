@@ -122,6 +122,16 @@ class Plan(IdMixin, TimestampMixin, Base):
         ForeignKey("plans.id", ondelete="SET NULL")
     )
 
+    # Minimum değişim modunda mı üretildi (şartname 9.8, M10).
+    #
+    # `previous_plan_id` bunu söylemiyor: her plan bir öncekinden türüyor ama
+    # yalnızca check-in sonrası çalıştırma önceki planı **başlangıç noktası**
+    # olarak alıyor. İş kuyruğa girerken karar veriliyor, işçi bu alanı
+    # okuyor — istek gövdesi o noktada elde değil.
+    minimal_change: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
     event: Mapped["Event"] = relationship(back_populates="plans")
     previous_plan: Mapped["Plan | None"] = relationship(remote_side="Plan.id")
     assignments: Mapped[list["Assignment"]] = relationship(

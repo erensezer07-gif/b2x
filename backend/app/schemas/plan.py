@@ -42,6 +42,13 @@ class RunMatchingRequest(BaseModel):
 
     seed: int | None = Field(default=None, ge=0)
 
+    # *"Motor gelmeyenler çıkarılmış halde tekrar çalışır."* (M10, 9.8)
+    #
+    # Önceki plan başlangıç noktası oluyor, başlamış turlar donuyor,
+    # sabitlenmiş atamalar korunuyor. Ayrı bir uç değil: yaptığı iş aynı,
+    # yeni bir plan versiyonu üretmek.
+    minimal_change: bool = False
+
 
 class PlanSummaryResponse(BaseModel):
     """Bir plan versiyonu ve hesabının durumu."""

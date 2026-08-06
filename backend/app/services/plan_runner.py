@@ -28,6 +28,7 @@ from app.models import (
     Assignment,
     Event,
     JobStatus,
+    Layout,
     MeetingRequest,
     MeetingRequestStatus,
     Plan,
@@ -35,6 +36,7 @@ from app.models import (
     Profile,
     Registration,
     RegistrationStatus,
+    Table,
     User,
 )
 from app.services.matching import build_engine_input, build_rows
@@ -43,7 +45,9 @@ from engine.runner import run_matching
 logger = logging.getLogger(__name__)
 
 
-async def create_queued_plan(session: AsyncSession, event: Event, seed: int | None) -> Plan:
+async def create_queued_plan(
+    session: AsyncSession, event: Event, seed: int | None, *, minimal_change: bool = False
+) -> Plan:
     """Yeni bir plan versiyonu açar; hesabı henüz yapılmadı.
 
     Versiyon numarası mevcut en yükseğin bir fazlası. Plan **taslak** olarak
@@ -63,6 +67,9 @@ async def create_queued_plan(session: AsyncSession, event: Event, seed: int | No
         job_status=JobStatus.QUEUED,
         seed=seed if seed is not None else get_settings().matching_default_seed,
         previous_plan_id=latest.id if latest is not None else None,
+        # Karar burada veriliyor, işçi okuyor: istek gövdesi o noktada elde
+        # değil (9.8).
+        minimal_change=minimal_change,
     )
     session.add(plan)
     await session.flush()
@@ -89,7 +96,13 @@ async def execute_plan(session: AsyncSession, plan_id: int) -> None:
     await session.commit()
 
     try:
-        context = await build_engine_input(session, event, seed=plan.seed)
+        # Minimum değişim modunda önceki plan başlangıç noktası (9.8).
+        previous = (
+            await session.get(Plan, plan.previous_plan_id)
+            if plan.minimal_change and plan.previous_plan_id is not None
+            else None
+        )
+        context = await build_engine_input(session, event, seed=plan.seed, previous_plan=previous)
 
         # Motor senkron ve CPU'ya bağlı. Doğrudan çağrılsaydı olay döngüsünü
         # saniyelerce kilitler ve aynı işçideki diğer işler beklerdi.
@@ -317,3 +330,75 @@ async def _names(session: AsyncSession, event_id: int) -> dict[int, str]:
     return {
         registration_id: name or f"#{registration_id}" for registration_id, name in result.all()
     }
+
+
+@dataclass(frozen=True, slots=True)
+class SeatChange:
+    """Bir kişinin yeri iki plan arasında nasıl değişti (M10).
+
+    *"Yeni versiyon organizatöre gösterilir, kimin yeri değişti listelenir."*
+
+    Masa numarası `None` ise o planda hiç oturmuyor: `before` boşsa yeni
+    yerleştirilmiş, `after` boşsa masadan çıkmış (gelmediği için ya da yer
+    kalmadığı için).
+    """
+
+    registration_id: int
+    name: str
+    slot_number: int
+    before: int | None
+    after: int | None
+
+
+async def seat_changes(
+    session: AsyncSession, event_id: int, plan_id: int, previous_plan_id: int
+) -> list[SeatChange]:
+    """İki plan arasında yeri değişenler (M10).
+
+    9.8'in sözü burada ölçülüyor: *"gerekmedikçe kimseyi kıpırdatma."*
+    Organizatör listeyi görüp onaylıyor.
+
+    Gelmediği için çıkarılan kişiler de listede — organizatör onların
+    masadan kalktığını görmeli.
+    """
+
+    async def seats(target: int) -> dict[tuple[int, int], int]:
+        result = await session.execute(
+            select(Assignment.registration_id, Assignment.slot_number, Assignment.table_id).where(
+                Assignment.plan_id == target
+            )
+        )
+        return {(registration, slot): table for registration, slot, table in result.all()}
+
+    before = await seats(previous_plan_id)
+    after = await seats(plan_id)
+
+    numbers = await _table_numbers(session, event_id)
+    names = await _names(session, event_id)
+
+    changes = []
+    for key in sorted(set(before) | set(after)):
+        registration_id, slot_number = key
+        old, new = before.get(key), after.get(key)
+        if old == new:
+            continue
+        changes.append(
+            SeatChange(
+                registration_id=registration_id,
+                name=names.get(registration_id, f"#{registration_id}"),
+                slot_number=slot_number,
+                before=numbers.get(old) if old is not None else None,
+                after=numbers.get(new) if new is not None else None,
+            )
+        )
+    changes.sort(key=lambda row: (row.name, row.slot_number))
+    return changes
+
+
+async def _table_numbers(session: AsyncSession, event_id: int) -> dict[int, int]:
+    result = await session.execute(
+        select(Table.id, Table.number)
+        .join(Layout, Layout.id == Table.layout_id)
+        .where(Layout.event_id == event_id)
+    )
+    return dict(result.all())

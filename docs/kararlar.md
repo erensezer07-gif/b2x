@@ -1614,3 +1614,68 @@ listede göstermek organizatörü yanlış hamleye davet ederdi.
 
 İki tarafın da oturmadığı bir ikili için "Düzeltilecek tur yok" yazıyor —
 takasla çözülecek bir şey yok, önce birinin masaya oturması gerekiyor.
+
+## Aşama 11 — Check-in (Tur 1: backend)
+
+### `plans.minimal_change` ayrı bir alan
+
+`previous_plan_id` bunu söylemiyor: **her** plan bir öncekinden türüyor ama
+yalnızca check-in sonrası çalıştırma önceki planı *başlangıç noktası* olarak
+alıyor. Karar iş kuyruğa girerken veriliyor, işçi bu alanı okuyor — istek
+gövdesi o noktada elde değil. Migration `0005`.
+
+### Yeniden çalıştırma ayrı bir uç değil
+
+`POST /plans` gövdesine `minimal_change` bayrağı eklendi. Yaptığı iş aynı:
+yeni bir plan versiyonu üretmek. İkinci bir uç aynı akışı (kontrol, kuyruk
+çakışması, versiyonlama) ikiye bölerdi.
+
+### Kimse okutulmadan yenilenemiyor
+
+Check-in hiç yapılmamışsa **herkes** `absent` — "gelmeyenleri çıkar" demek
+planı tamamen boşaltırdı. `has_check_in` kapısı 409 ile duruyor ve sebebini
+yazıyor.
+
+### Gelmeyenler listeden silinmiyor
+
+Motor indeks tabanlı. Katılımcı listesinden çıkarmak indeksleri kaydırır ve
+`previous_plan` içindeki referanslar başka kişilere işaret ederdi. Sözleşme
+(`absent_participants`) bunu Aşama 2'de zaten öngörmüştü; burada ilk kez
+kullanılıyor.
+
+### Sabitlenmiş atamalar motora ilk kez geçti
+
+Aşama 8'de `is_pinned` yazıldı ve o zaman yalnızca takası engelliyordu.
+Minimum değişimde `FixedAssignment` olarak motora gidiyor ve 9.5'in "sabit
+atamalar" kesin kuralı onu koruyor. Test yeni planda satırın kaymadığını
+doğruluyor.
+
+### Dondurulmuş turlar programdan çıkıyor
+
+*"Başlamış veya bitmiş slotlara dokunulmaz."* Ayrı bir alan tutulmuyor:
+`schedule.py` zaten saatleri hesaplıyor, `started_slots` yalnızca "başladı
+mı" diye soruyor. Slot numarası 1 tabanlı, motor 0 tabanlı — dönüşüm tek
+yerde.
+
+### Aynı kodu iki kez okumak hata değil
+
+Kapıda olur. Yanıt `already_present` ile bunu söylüyor ve `checked_in_at`
+**ilk** okumada kalıyor: ikinci okuma giriş saatini kaydırmamalı.
+
+### Başka etkinliğin kodu da "böyle bir kod yok"
+
+Kod global olarak benzersiz ama okuma etkinlikle sınırlı. "Bu kod başka bir
+etkinliğe ait" demek, başka bir organizatörün katılımcı listesi hakkında
+bilgi sızdırırdı.
+
+### Arama Türkçe harfleri katlıyor
+
+`str.lower()` yetmiyor: "İ" küçültülünce noktalı i + birleşen nokta oluyor ve
+"i" ile eşleşmiyor. Kapıda "ipek" yazan da "İpek" yazan da aynı kişiyi
+bulmalı. Katlama Python tarafında — liste bir etkinliğin kabul edilmişleriyle
+sınırlı ve veritabanı harmanlaması makineden makineye değişiyor.
+
+### Sayaç süzgeçten etkilenmiyor
+
+Arama yaparken *"kaç kişi bekleniyor"* bilgisi kaybolmamalı. Liste süzülüyor,
+sayaç etkinliğin tamamını sayıyor.

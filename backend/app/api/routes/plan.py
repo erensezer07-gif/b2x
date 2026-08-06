@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from app.api.deps import JobQueueDep, OwnedEvent, SessionDep
 from app.models import Assignment, JobStatus, Plan
+from app.schemas.attendance import PlanChangesResponse, SeatChangeResponse
 from app.schemas.meeting_request import UnmetRequestResponse
 from app.schemas.plan import (
     MatchingCheckResponse,
@@ -27,6 +28,7 @@ from app.schemas.plan import (
     SwapWarningResponse,
     TableViewResponse,
 )
+from app.services.attendance import has_check_in
 from app.services.matching import build_matching_check
 from app.services.plan_editing import (
     SwapRejected,
@@ -40,6 +42,7 @@ from app.services.plan_runner import (
     assignment_count,
     create_queued_plan,
     request_counts,
+    seat_changes,
     seated_participant_count,
     unmatched_names,
     unmet_requests,
@@ -172,7 +175,15 @@ async def run_matching(
             detail="Bu etkinlik için bir eşleştirme zaten çalışıyor.",
         )
 
-    plan = await create_queued_plan(session, event, payload.seed)
+    if payload.minimal_change and not await has_check_in(session, event.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Önce en az bir katılımcının geldiğini işaretle; yoksa plan tamamen boşalır.",
+        )
+
+    plan = await create_queued_plan(
+        session, event, payload.seed, minimal_change=payload.minimal_change
+    )
     await session.commit()
 
     # Kuyruk ulaşılamazsa `None` dönüyor ve plan `queued` kalıyor; ayrıntı
@@ -300,3 +311,35 @@ async def publish_plan(plan_id: int, event: OwnedEvent, session: SessionDep) -> 
     except SwapRejected as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error.message) from error
     return await _to_response(session, plan)
+
+
+@router.get("/plans/{plan_id}/changes", summary="Kimin yeri değişti")
+async def read_plan_changes(
+    plan_id: int, event: OwnedEvent, session: SessionDep
+) -> PlanChangesResponse:
+    """*"Yeni versiyon organizatöre gösterilir, kimin yeri değişti
+    listelenir."* (M10)
+
+    9.8'in sözü burada ölçülüyor: *"gerekmedikçe kimseyi kıpırdatma."*
+    Öncesi olmayan bir plan (ilk versiyon) boş liste döndürüyor —
+    karşılaştırılacak bir şey yok.
+    """
+    plan = await _require_plan(session, event, plan_id)
+    if plan.previous_plan_id is None:
+        return PlanChangesResponse(previous_plan_id=None, changes=[], moved_people=0)
+
+    rows = await seat_changes(session, event.id, plan.id, plan.previous_plan_id)
+    return PlanChangesResponse(
+        previous_plan_id=plan.previous_plan_id,
+        changes=[
+            SeatChangeResponse(
+                registration_id=row.registration_id,
+                name=row.name,
+                slot_number=row.slot_number,
+                before=row.before,
+                after=row.after,
+            )
+            for row in rows
+        ],
+        moved_people=len({row.registration_id for row in rows}),
+    )

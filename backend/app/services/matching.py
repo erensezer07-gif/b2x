@@ -46,7 +46,15 @@ from app.models import (
 )
 from app.services.company import normalize_company_name
 from app.services.profile import evaluate_profile
-from engine.types import EngineInput, EngineOutput, EngineSettings, MeetingRequestPair, TableSpec
+from engine.types import Assignment as EngineAssignment
+from engine.types import (
+    EngineInput,
+    EngineOutput,
+    EngineSettings,
+    FixedAssignment,
+    MeetingRequestPair,
+    TableSpec,
+)
 from engine.types import Participant as EngineParticipant
 from engine.types import TableKind as EngineTableKind
 
@@ -187,10 +195,88 @@ def _category_ids(profile: Profile | None, direction: TagDirection) -> frozenset
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _History:
+    """Minimum değişim modunun motora verdiği geçmiş (9.8).
+
+    Boş hâli normal çalıştırma: önceki plan yok, hiçbir slot donmamış, kimse
+    gelmemiş sayılmıyor.
+    """
+
+    plan: tuple[EngineAssignment, ...] | None = None
+    frozen: frozenset[int] = frozenset()
+    absent: frozenset[int] = frozenset()
+    fixed: tuple[FixedAssignment, ...] = ()
+
+
+async def _load_history(
+    session: AsyncSession,
+    event: Event,
+    previous_plan: Plan,
+    position_of: dict[int, int],
+    table_position: dict[int, int],
+) -> _History:
+    """Önceki planı motorun indeks evrenine çevirir (9.8).
+
+    Üç şey birden çıkıyor:
+
+    * **Başlangıç planı** — Adım 3 atlanacak, arama bunun üzerinde çalışacak.
+    * **Dondurulmuş turlar** — başlamış veya bitmiş olanlar; *"sadece gelecek
+      slotlar yeniden hesaplanır."*
+    * **Sabit atamalar** — organizatörün Aşama 8'de sabitlediği satırlar.
+      Aşama 8'de yazılmıştı ama motora ilk kez burada geçiyor.
+
+    Kabul edilmiş listede olmayan bir başvuruya ait satır atlanıyor: plan
+    üretildikten sonra biri geri çekilmiş olabilir ve indeksi yok.
+    """
+    from app.services.attendance import absent_registration_ids, started_slots
+
+    result = await session.execute(select(Assignment).where(Assignment.plan_id == previous_plan.id))
+    rows = list(result.scalars())
+
+    plan_rows = []
+    fixed_rows = []
+    for row in rows:
+        participant = position_of.get(row.registration_id)
+        table = table_position.get(row.table_id)
+        if participant is None or table is None:
+            continue
+        # Motor 0 tabanlı, veritabanı 1 tabanlı (9.2).
+        entry = EngineAssignment(slot=row.slot_number - 1, table=table, participant=participant)
+        plan_rows.append(entry)
+        if row.is_pinned:
+            fixed_rows.append(
+                FixedAssignment(slot=entry.slot, table=entry.table, participant=entry.participant)
+            )
+
+    absent_ids = await absent_registration_ids(session, event.id)
+    absent = frozenset(
+        position_of[registration_id]
+        for registration_id in absent_ids
+        if registration_id in position_of
+    )
+
+    return _History(
+        plan=tuple(plan_rows),
+        frozen=frozenset(slot - 1 for slot in started_slots(event)),
+        absent=absent,
+        fixed=tuple(fixed_rows),
+    )
+
+
 async def build_engine_input(
-    session: AsyncSession, event: Event, *, seed: int | None = None
+    session: AsyncSession,
+    event: Event,
+    *,
+    seed: int | None = None,
+    previous_plan: Plan | None = None,
 ) -> MatchingContext:
-    """Etkinliğin verisini motorun girdisine çevirir."""
+    """Etkinliğin verisini motorun girdisine çevirir.
+
+    `previous_plan` verilirse **minimum değişim modu** (9.8): önceki plan
+    başlangıç noktası oluyor, gelmeyenler çıkarılıyor, başlamış turlar
+    donduruluyor ve sabitlenmiş atamalar korunuyor.
+    """
     settings = get_settings()
     registrations = await _load_accepted_registrations(session, event.id)
     tables = await _load_tables(session, event.id)
@@ -235,11 +321,22 @@ async def build_engine_input(
         for index, table in enumerate(tables)
     )
 
+    table_position = {table.id: index for index, table in enumerate(tables)}
+    history = (
+        await _load_history(session, event, previous_plan, position_of, table_position)
+        if previous_plan is not None
+        else _History()
+    )
+
     engine_input = EngineInput(
         participants=tuple(participants),
         tables=table_specs,
         slot_count=event.slot_count,
         requests=await _load_requests(session, event.id, position_of),
+        fixed_assignments=history.fixed,
+        previous_plan=history.plan,
+        frozen_slots=history.frozen,
+        absent_participants=history.absent,
         settings=EngineSettings(
             min_meetings_per_person=settings.matching_min_meetings_per_person,
             quality_threshold=settings.matching_quality_threshold,
