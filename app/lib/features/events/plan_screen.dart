@@ -298,6 +298,14 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
           // Karşılanmayan bir talepten doğrudan takas ekranına (M9).
           onOpenSlot: (slotNumber) => _selectSlot(slotNumber),
         ),
+        // Check-in sonrası yenilenmiş plansa kimin yeri değişti (M10).
+        ...switch (ref.watch(planChangesProvider(_plan))) {
+          AsyncData(:final value) when value.previousPlanId != null => [
+              const SizedBox(height: AppSpacing.md),
+              SeatChangesPanel(changes: value),
+            ],
+          _ => const <Widget>[],
+        },
         if (_error != null) ...[
           const SizedBox(height: AppSpacing.md),
           SwapErrorBanner(

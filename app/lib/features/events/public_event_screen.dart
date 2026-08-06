@@ -13,6 +13,7 @@ import 'event_list_screen.dart';
 import 'models.dart';
 import 'my_plan_screen.dart';
 import 'participants_screen.dart';
+import 'qr_screen.dart';
 import 'schedule.dart';
 
 /// Katılımcının gördüğü etkinlik detayı ve başvuru akışı (şartname M3).
@@ -161,6 +162,16 @@ class _PublicEventScreenState extends ConsumerState<PublicEventScreen> {
             ),
             icon: const Icon(Icons.handshake_outlined),
             label: const Text('Kimlerle görüşmek istersin'),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // Girişte okutulacak kod (M10).
+          OutlinedButton.icon(
+            onPressed: () => context.goNamed(
+              QrScreen.routeName,
+              pathParameters: {'eventId': '${widget.eventId}'},
+            ),
+            icon: const Icon(Icons.qr_code_2),
+            label: const Text('Giriş kodum'),
           ),
         ],
 

@@ -736,3 +736,105 @@ class _UnmetRow extends StatelessWidget {
     );
   }
 }
+
+/// Yeri değişenler (şartname M10, 9.8).
+///
+/// *"Yeni versiyon organizatöre gösterilir, kimin yeri değişti listelenir,
+/// organizatör onaylayınca yayına geçer."*
+///
+/// 9.8'in sözü burada ölçülüyor: *"gerekmedikçe kimseyi kıpırdatma."* Liste
+/// kısaysa mod çalışıyor demektir.
+class SeatChangesPanel extends StatelessWidget {
+  const SeatChangesPanel({super.key, required this.changes});
+
+  final PlanChanges changes;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    if (changes.isEmpty) {
+      return Card(
+        margin: EdgeInsets.zero,
+        color: colors.surfaceContainerHighest,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            children: [
+              Icon(Icons.done_all, color: colors.onSurfaceVariant),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  'Kimsenin yeri değişmedi.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.compare_arrows, color: colors.primary),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    '${changes.movedPeople} kişinin yeri değişti',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Önceki versiyona göre. Diğer herkes yerinde kaldı.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            for (final change in changes.changes)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 56,
+                      child: Text(
+                        '${change.slotNumber}. Tur',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(change.name, style: theme.textTheme.bodyMedium),
+                    ),
+                    Text(
+                      change.description,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

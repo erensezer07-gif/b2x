@@ -1425,3 +1425,186 @@ class UnmetRequest {
       ? '$requesterName ↔ $targetName'
       : '$requesterName → $targetName';
 }
+
+// --- Check-in (M10) -----------------------------------------------------------
+
+/// Katılımcının kendi giriş kodu.
+///
+/// Kod metin olarak geliyor; QR'ı istemci çiziyor. M10: *"internet olmasa bile
+/// görüntülenebilmeli"* — sunucudan görsel çekmek bunu bozardı.
+class MyQrCode {
+  const MyQrCode({
+    required this.registrationId,
+    required this.qrCode,
+    this.checkedInAt,
+  });
+
+  factory MyQrCode.fromJson(Map<String, dynamic> json) => MyQrCode(
+        registrationId: json['registration_id'] as int,
+        qrCode: json['qr_code'] as String,
+        checkedInAt: json['checked_in_at'] == null
+            ? null
+            : DateTime.parse(json['checked_in_at'] as String).toLocal(),
+      );
+
+  final int registrationId;
+  final String qrCode;
+  final DateTime? checkedInAt;
+
+  bool get checkedIn => checkedInAt != null;
+}
+
+/// Check-in listesindeki bir satır.
+class Attendee {
+  const Attendee({
+    required this.registrationId,
+    required this.present,
+    this.fullName,
+    this.title,
+    this.company,
+    this.photoUrl,
+    this.checkedInAt,
+  });
+
+  factory Attendee.fromJson(Map<String, dynamic> json) => Attendee(
+        registrationId: json['registration_id'] as int,
+        present: json['present'] as bool,
+        fullName: json['full_name'] as String?,
+        title: json['title'] as String?,
+        company: json['company'] as String?,
+        photoUrl: json['photo_url'] as String?,
+        checkedInAt: json['checked_in_at'] == null
+            ? null
+            : DateTime.parse(json['checked_in_at'] as String).toLocal(),
+      );
+
+  final int registrationId;
+  final bool present;
+  final String? fullName;
+  final String? title;
+  final String? company;
+  final String? photoUrl;
+  final DateTime? checkedInAt;
+
+  String get displayName => fullName ?? 'Adı girilmemiş';
+}
+
+/// Liste ve sayaç.
+///
+/// Sayaç **süzgeçten etkilenmiyor**: arama yaparken "kaç kişi bekleniyor"
+/// bilgisi kaybolmamalı.
+class AttendanceBoard {
+  const AttendanceBoard({
+    required this.attendees,
+    required this.acceptedCount,
+    required this.presentCount,
+    required this.expectedCount,
+  });
+
+  factory AttendanceBoard.fromJson(Map<String, dynamic> json) => AttendanceBoard(
+        attendees: (json['attendees'] as List<dynamic>)
+            .map((item) => Attendee.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        acceptedCount: json['accepted_count'] as int,
+        presentCount: json['present_count'] as int,
+        expectedCount: json['expected_count'] as int,
+      );
+
+  final List<Attendee> attendees;
+  final int acceptedCount;
+  final int presentCount;
+  final int expectedCount;
+
+  bool get anyoneArrived => presentCount > 0;
+}
+
+/// Kod okuma sonucu.
+class ScanResult {
+  const ScanResult({
+    required this.attendee,
+    required this.board,
+    required this.alreadyPresent,
+  });
+
+  factory ScanResult.fromJson(Map<String, dynamic> json) => ScanResult(
+        attendee: Attendee.fromJson(json['attendee'] as Map<String, dynamic>),
+        board: AttendanceBoard(
+          attendees: const [],
+          acceptedCount: json['accepted_count'] as int,
+          presentCount: json['present_count'] as int,
+          expectedCount: json['expected_count'] as int,
+        ),
+        alreadyPresent: json['already_present'] as bool,
+      );
+
+  final Attendee attendee;
+
+  /// Yalnızca sayaç dolu; liste ayrı çekiliyor.
+  final AttendanceBoard board;
+
+  /// Aynı kod ikinci kez okutulduysa. Hata değil — kapıda olur.
+  final bool alreadyPresent;
+}
+
+/// İki plan arasında yeri değişen bir kişi (M10).
+class SeatChange {
+  const SeatChange({
+    required this.registrationId,
+    required this.name,
+    required this.slotNumber,
+    this.before,
+    this.after,
+  });
+
+  factory SeatChange.fromJson(Map<String, dynamic> json) => SeatChange(
+        registrationId: json['registration_id'] as int,
+        name: json['name'] as String,
+        slotNumber: json['slot_number'] as int,
+        before: json['before'] as int?,
+        after: json['after'] as int?,
+      );
+
+  final int registrationId;
+  final String name;
+  final int slotNumber;
+
+  /// Masa numarası; boşsa o planda hiç oturmuyor.
+  final int? before;
+  final int? after;
+
+  /// Değişimin Türkçe karşılığı.
+  ///
+  /// Masa numarasına ek getirilmiyor — Türkçede ek sayının okunuşuna göre
+  /// değişiyor (Aşama 8'de tarayıcıda yakalanan tuzak).
+  String get description {
+    if (before == null) return 'yeni yerleşti · Masa $after';
+    if (after == null) return 'masadan kalktı · eski yeri Masa $before';
+    return 'Masa $before → Masa $after';
+  }
+}
+
+/// İki plan arasındaki fark (M10).
+class PlanChanges {
+  const PlanChanges({
+    required this.changes,
+    required this.movedPeople,
+    this.previousPlanId,
+  });
+
+  factory PlanChanges.fromJson(Map<String, dynamic> json) => PlanChanges(
+        changes: (json['changes'] as List<dynamic>)
+            .map((item) => SeatChange.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        movedPeople: json['moved_people'] as int,
+        previousPlanId: json['previous_plan_id'] as int?,
+      );
+
+  final List<SeatChange> changes;
+
+  /// Kaç **kişinin** yeri değişti — satır sayısı değil.
+  final int movedPeople;
+
+  final int? previousPlanId;
+
+  bool get isEmpty => changes.isEmpty;
+}

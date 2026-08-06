@@ -283,9 +283,16 @@ class EventRepository {
   /// Eşleştirmeyi kuyruğa atar.
   ///
   /// Anında dönüyor; plan `queued` durumunda. Sonuç `loadPlan` ile izleniyor.
-  Future<PlanSummary> runMatching(int eventId, {int? seed}) async {
+  Future<PlanSummary> runMatching(
+    int eventId, {
+    int? seed,
+    bool minimalChange = false,
+  }) async {
     return PlanSummary.fromJson(
-      await _api.post('/events/$eventId/plans', body: {'seed': ?seed}),
+      await _api.post(
+        '/events/$eventId/plans',
+        body: {'seed': ?seed, 'minimal_change': minimalChange},
+      ),
     );
   }
 
@@ -412,6 +419,48 @@ class EventRepository {
   Future<ParticipantList> withdrawRequest(int eventId, int requestId) async {
     return ParticipantList.fromJson(
       await _api.delete('/events/$eventId/requests/$requestId'),
+    );
+  }
+
+  // --- Check-in (M10) --------------------------------------------------------
+
+  /// Katılımcının kendi giriş kodu.
+  Future<MyQrCode> loadMyQr(int eventId) async {
+    return MyQrCode.fromJson(await _api.getObject('/events/$eventId/my-qr'));
+  }
+
+  /// Check-in listesi ve sayaç (organizatör).
+  Future<AttendanceBoard> loadAttendance(int eventId, {String? search}) async {
+    return AttendanceBoard.fromJson(
+      await _api.getObject('/events/$eventId/attendance', query: {'q': ?search}),
+    );
+  }
+
+  /// Okutulan kodu işler.
+  Future<ScanResult> scanCode(int eventId, String qrCode) async {
+    return ScanResult.fromJson(
+      await _api.post('/events/$eventId/attendance/scan', body: {'qr_code': qrCode}),
+    );
+  }
+
+  /// Elle geldi/gelmedi işaretler; güncel listeyi döner.
+  Future<AttendanceBoard> markAttendance({
+    required int eventId,
+    required int registrationId,
+    required bool present,
+  }) async {
+    return AttendanceBoard.fromJson(
+      await _api.post(
+        '/events/$eventId/attendance/$registrationId',
+        body: {'present': present},
+      ),
+    );
+  }
+
+  /// İki plan arasında kimin yeri değişti (M10).
+  Future<PlanChanges> loadPlanChanges(int eventId, int planId) async {
+    return PlanChanges.fromJson(
+      await _api.getObject('/events/$eventId/plans/$planId/changes'),
     );
   }
 }

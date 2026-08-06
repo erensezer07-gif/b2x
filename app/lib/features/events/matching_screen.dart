@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/state_views.dart';
+import 'check_in_screen.dart';
 import 'event_controller.dart';
 import 'event_list_screen.dart';
 import 'models.dart';
@@ -46,7 +47,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
     super.dispose();
   }
 
-  Future<void> _run() async {
+  Future<void> _run({bool minimalChange = false}) async {
     setState(() {
       _starting = true;
       _error = null;
@@ -54,7 +55,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
 
     final actions = ref.read(matchingActionsProvider(widget.eventId));
     try {
-      final started = await actions.run();
+      final started = await actions.run(minimalChange: minimalChange);
       if (!mounted) return;
       setState(() {
         _plan = started;
@@ -151,9 +152,28 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
               ),
             ),
           ],
+          const SizedBox(height: AppSpacing.md),
+          // Check-in ekranı (M10). Eşleştirmeden ayrı bir iş ama aynı
+          // etkinliğin kapısı; organizatör buradan giriyor.
+          OutlinedButton.icon(
+            onPressed: () => context.goNamed(
+              CheckInScreen.routeName,
+              pathParameters: {'eventId': '${widget.eventId}'},
+            ),
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('Girişte kod okut'),
+          ),
           if (current != null) ...[
             const SizedBox(height: AppSpacing.lg),
-            _PlanCard(plan: current, onOpen: () => _openPlan(current.id)),
+            _PlanCard(
+              plan: current,
+              onOpen: () => _openPlan(current.id),
+              // *"Organizatör 'planı güncelle' der."* (M10) Yalnızca
+              // check-in başladıysa anlamlı; kapı sunucuda.
+              onRefresh: (check.acceptedCount > 0 && current.hasResult)
+                  ? () => _run(minimalChange: true)
+                  : null,
+            ),
           ],
           if (history.length > 1) ...[
             const SizedBox(height: AppSpacing.lg),
@@ -312,10 +332,13 @@ class _RunButton extends StatelessWidget {
 
 /// Çalışan veya bitmiş planın durumu ve özeti.
 class _PlanCard extends StatelessWidget {
-  const _PlanCard({required this.plan, required this.onOpen});
+  const _PlanCard({required this.plan, required this.onOpen, this.onRefresh});
 
   final PlanSummary plan;
   final VoidCallback onOpen;
+
+  /// *"Gelmeyenler çıkarılmış halde tekrar çalıştır."* (M10, 9.8)
+  final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -391,6 +414,14 @@ class _PlanCard extends StatelessWidget {
                 icon: const Icon(Icons.grid_view_outlined),
                 label: const Text('Planı incele ve düzelt'),
               ),
+              if (onRefresh != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                OutlinedButton.icon(
+                  onPressed: onRefresh,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Gelmeyenleri çıkar ve planı güncelle'),
+                ),
+              ],
             ],
           ],
         ),

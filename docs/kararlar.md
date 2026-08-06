@@ -1679,3 +1679,47 @@ sınırlı ve veritabanı harmanlaması makineden makineye değişiyor.
 
 Arama yaparken *"kaç kişi bekleniyor"* bilgisi kaybolmamalı. Liste süzülüyor,
 sayaç etkinliğin tamamını sayıyor.
+
+## Aşama 11 — Check-in (Tur 2: istemci)
+
+### QR istemcide çiziliyor
+
+M10: *"internet olmasa bile görüntülenebilmeli — ekran görüntüsü alınabilir
+olmalı."* Sunucudan görsel çekmek bunu bozardı. `qr_flutter` ile kod
+metninden çiziliyor.
+
+Kod **her temada beyaz zemin üzerinde**: QR okuyucular koyu zeminde
+zorlanıyor ve uygulamanın karanlık teması varsayılan.
+
+Kod metin olarak da yazılıyor ve seçilebilir: kamera okumazsa organizatör
+elle girebilsin.
+
+### Kamera kapatılabilir, elle arama hep açık
+
+M10 kamerayı istiyor ama *"elle arama da olmalı"* diyor. Kamera bir kolaylık:
+kamerası olmayan, izni reddedilen ya da pili biten bir cihazda check-in yine
+yapılabiliyor. `MobileScanner`'ın hata görünümü de bunu söylüyor —
+açılamazsa ekran çökmüyor, aşağıdaki listeye yönlendiriyor.
+
+Ayrıca "kodu elle gir" düğmesi var: katılımcı ekranındaki metin okunup
+yazılabiliyor.
+
+### Aynı kod üç saniye içinde tekrar işlenmiyor
+
+Kamera saniyede onlarca kare okuyor; her karede istek atmak sunucuyu döverdi.
+Aynı kod için üç saniyelik bir sessizlik var. Farklı kod hemen işleniyor —
+kapıda sıra beklemiyor.
+
+### Yeri değişenler plan ekranında
+
+Ayrı bir ekran değil: organizatör yeni versiyonu zaten orada inceliyor ve
+yayınlama düğmesi orada. Panel yalnızca öncesi olan planlarda çıkıyor.
+
+Kimse kıpırdamadıysa panel bunu açıkça söylüyor — boş liste "hesaplanmadı"
+gibi okunurdu.
+
+### "Gelmeyenleri çıkar" düğmesi eşleştirme ekranında
+
+Plan güncelleme yeni bir versiyon üretiyor; o iş zaten eşleştirme ekranının
+işi. Düğme yalnızca hesabı bitmiş bir plan varken çıkıyor; kimse
+okutulmadıysa sunucu 409 ile duruyor ve sebebini yazıyor.

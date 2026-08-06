@@ -136,6 +136,42 @@ class TablemateQuery {
   int get hashCode => Object.hash(eventId, registrationId);
 }
 
+/// Katılımcının kendi giriş kodu (M10).
+final myQrProvider = FutureProvider.family<MyQrCode, int>((ref, eventId) {
+  return ref.watch(eventRepositoryProvider).loadMyQr(eventId);
+});
+
+/// Check-in listesi ve sayaç (M10, organizatör).
+final attendanceProvider =
+    FutureProvider.family<AttendanceBoard, AttendanceQuery>((ref, query) {
+  return ref
+      .watch(eventRepositoryProvider)
+      .loadAttendance(query.eventId, search: query.search);
+});
+
+/// Check-in listesinin sorgusu.
+class AttendanceQuery {
+  const AttendanceQuery(this.eventId, {this.search});
+
+  final int eventId;
+  final String? search;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AttendanceQuery && other.eventId == eventId && other.search == search;
+
+  @override
+  int get hashCode => Object.hash(eventId, search);
+}
+
+/// İki plan arasında kimin yeri değişti (M10).
+final planChangesProvider =
+    FutureProvider.family<PlanChanges, PlanQuery>((ref, query) {
+  return ref
+      .watch(eventRepositoryProvider)
+      .loadPlanChanges(query.eventId, query.planId);
+});
+
 /// Etkinliğin katılımcıları ve kalan talep hakkım (M9).
 ///
 /// Süzgeç argümanda: her süzgeç ayrı bir önbellek. Talep gönderildiğinde
@@ -432,8 +468,15 @@ class MatchingActions {
   EventRepository get _repository => _ref.read(eventRepositoryProvider);
 
   /// Yeni bir plan versiyonu açar ve hesabı kuyruğa atar.
-  Future<PlanSummary> run({int? seed}) async {
-    final plan = await _repository.runMatching(eventId, seed: seed);
+  ///
+  /// `minimalChange` check-in sonrası yenileme (9.8): önceki plan başlangıç
+  /// noktası oluyor, gelmeyenler çıkarılıyor, başlamış turlar donuyor.
+  Future<PlanSummary> run({int? seed, bool minimalChange = false}) async {
+    final plan = await _repository.runMatching(
+      eventId,
+      seed: seed,
+      minimalChange: minimalChange,
+    );
     _ref.invalidate(eventPlansProvider(eventId));
     return plan;
   }
@@ -578,3 +621,36 @@ class RequestActions {
 final requestActionsProvider = Provider.family<RequestActions, int>((ref, eventId) {
   return RequestActions(ref, eventId);
 });
+
+/// Check-in işlemleri (M10).
+///
+/// Uçlar güncel listeyi geri döndürüyor; ekran onu doğrudan kullanıyor.
+/// Sağlayıcı yine de tazeleniyor — arama süzgeci değişince taze veri gelmeli.
+class AttendanceActions {
+  const AttendanceActions(this._ref, this.eventId);
+
+  final Ref _ref;
+  final int eventId;
+
+  Future<ScanResult> scan(String qrCode) async {
+    final result = await _ref.read(eventRepositoryProvider).scanCode(eventId, qrCode);
+    _ref.invalidate(attendanceProvider);
+    return result;
+  }
+
+  Future<AttendanceBoard> mark(int registrationId, {required bool present}) async {
+    final board = await _ref.read(eventRepositoryProvider).markAttendance(
+          eventId: eventId,
+          registrationId: registrationId,
+          present: present,
+        );
+    _ref.invalidate(attendanceProvider);
+    return board;
+  }
+}
+
+final attendanceActionsProvider =
+    Provider.family<AttendanceActions, int>((ref, eventId) {
+  return AttendanceActions(ref, eventId);
+});
+

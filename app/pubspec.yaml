@@ -42,6 +42,14 @@ dependencies:
   flutter_secure_storage: ^10.3.1
   image_picker: ^1.2.3
 
+  # Giriş kodunun QR olarak çizilmesi (şartname M10). Sunucudan görsel
+  # çekilmiyor: *"internet olmasa bile görüntülenebilmeli."*
+  qr_flutter: ^4.1.0
+
+  # Organizatörün kamerayla kod okuması (M10). Elle arama her zaman açık —
+  # kamera olmayan bir cihazda check-in yine yapılabiliyor.
+  mobile_scanner: ^7.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

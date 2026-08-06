@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/register_screen.dart';
+import '../../features/events/check_in_screen.dart';
 import '../../features/events/event_list_screen.dart';
 import '../../features/events/layout/layout_editor_screen.dart';
 import '../../features/events/matching_screen.dart';
@@ -11,6 +12,7 @@ import '../../features/events/my_plan_screen.dart';
 import '../../features/events/participants_screen.dart';
 import '../../features/events/plan_screen.dart';
 import '../../features/events/public_event_screen.dart';
+import '../../features/events/qr_screen.dart';
 import '../../features/events/registrations_screen.dart';
 import '../../features/events/wizard/event_wizard_screen.dart';
 import '../../features/profile/profile_screen.dart';
@@ -144,6 +146,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => TablemateScreen(
           eventId: int.parse(state.pathParameters['eventId']!),
           registrationId: int.parse(state.pathParameters['registrationId']!),
+        ),
+      ),
+      // Organizatörün check-in ekranı (M10). Tam ekran: kamera, sayaç ve
+      // liste dar bir sütuna sığmaz.
+      GoRoute(
+        path: CheckInScreen.routePath,
+        name: CheckInScreen.routeName,
+        builder: (context, state) => CheckInScreen(
+          eventId: int.parse(state.pathParameters['eventId']!),
+        ),
+      ),
+      // Katılımcının giriş kodu (M10).
+      GoRoute(
+        path: QrScreen.routePath,
+        name: QrScreen.routeName,
+        builder: (context, state) => QrScreen(
+          eventId: int.parse(state.pathParameters['eventId']!),
         ),
       ),
       // Görüşme talepleri — katılımcı listesi (M9).
