@@ -806,7 +806,7 @@ Bu numaralandırma projenin yapım sırasıdır. Algoritmanın içindeki "Adım"
 
 Bunlar henüz netleşmedi, ilerledikçe doldurulacak.
 
-- ~~Etiket havuzunun içeriği: kaç kategori, her kategoride hangi etiketler~~ — Aşama 3'te başlangıç seti kondu: 6 kategori × 8 etiket. Gerçek etkinlik verisiyle ayarlanacak
+- ~~Etiket havuzunun içeriği: kaç kategori, her kategoride hangi etiketler~~ — Aşama 3'te başlangıç seti kondu (6×8), Aşama 6'da 9 kategori × 8 etikete çıkarıldı. **72 bir tavandır:** kişi başı asgari seçim 3 olduğu sürece havuz büyüdükçe eşleşme çöküyor (ölçüm `docs/kararlar.md`'de). Daha büyük havuz isteniyorsa önce 9.3'e kategori düzeyinde kısmi puan eklenmeli
 - ~~Sektör listesinin içeriği~~ — Aşama 3'te başlangıç seti kondu: 18 sektör. Gerçek etkinlik verisiyle ayarlanacak
 - Sinerji skoru bileşenlerinin başlangıç ağırlıkları (test verisiyle ayarlanacak)
 - Kalite eşiğinin nihai değeri — başlangıç değeri ortam dosyasında, test verisiyle ayarlanacak
