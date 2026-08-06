@@ -1455,3 +1455,53 @@ düşmüştü; orada `rollback` sonrasıydı, burada eksik `selectinload`.
 
 Bakanın **kendi** profili de yükleniyor: "siz bunu arıyorsunuz" cümlesi
 onun etiketlerini gerektiriyor.
+
+## Aşama 9 — Katılımcı görünümü (Tur 2: istemci)
+
+### Plan etkinlik detayının altında
+
+`/kesfet/{id}/planim` — katılımcı önce etkinliği görüyor, planına oradan
+giriyor. Ayrı bir sekme açmak, planı olmayan bir katılımcıya boş bir sekme
+göstermek olurdu; düğme yalnızca kabul edilmiş katılımcıya çıkıyor.
+
+### Gerekçe cümlesi istemcide kuruluyor
+
+Sunucu `{kind, values}` gönderiyor. Aşama 6-7-8'deki kalıp; bütün Türkçe metin
+tek katmanda. Tanınmayan anahtar **boş** dönüyor ve o gerekçe hiç
+gösterilmiyor — uydurma bir cümle yazmaktansa susmak doğru.
+
+### Üç ve fazlası etikette bağlaç değil virgül
+
+İlk yazımda `'X, Y ve N alan daha'` vardı. Etiket adının kendisi "ve"
+içerebiliyor ("Veri analitiği ve raporlama") ve cümle *"... raporlama ve 1
+alan daha"* diye çift bağlaçla çıkıyordu. Tarayıcıda görüldü, virgüle
+çevrildi.
+
+Aynı turda ikinci pürüz: çok etiketli cümlede zamir tekil kalmıştı ("siz
+bunu arıyorsunuz"). Etiket sayısına göre "bunu / bunları" seçiliyor.
+
+### Kroki oturansız çiziliyor
+
+Katılımcı krokide yalnızca **kendi** masasını vurgulu görüyor; diğer masalar
+numaralarıyla duruyor, kim oturduğu yok. Bu bir arayüz tercihi değil: uç o
+veriyi hiç göndermiyor (Bölüm 7).
+
+Hücre kenarı editördekinden küçük (28 px / 64 px): burada sürükleme yok,
+salonun tamamı bir bakışta görünmeli.
+
+### Boş tur gizlenmiyor
+
+M8: *"Bir slotta eşleşmemişse o slot 'Bu turda serbestsin' olarak gösterilir.
+Boş bırakılmaz, açıklama yazılır."* Satır listede duruyor, dokunulamıyor ve
+kendi cümlesini yazıyor. Sunucu da o turu listede tutuyor — boşluk arayüzde
+uydurulmuyor.
+
+### İstemci hatası yeniden denenmiyor
+
+Riverpod 3 başarısız sağlayıcıları kendiliğinden yeniden deniyor. Geçici ağ
+kesintisinde doğru davranış, ama **404 asla düzelmez**: masa arkadaşı olmayan
+birinin profili istendiğinde ekran saniyelerce dönen bir çark gösteriyordu,
+hata cümlesi ancak denemeler yavaşlayınca çıkıyordu. Tarayıcıda görüldü.
+
+`ProviderScope(retry: ...)` ile tek yerden: 4xx hiç denenmiyor, gerisi üç kez
+ve artan aralıklarla.

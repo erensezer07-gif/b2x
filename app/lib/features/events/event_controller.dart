@@ -90,6 +90,52 @@ final eventPlansProvider =
   return ref.watch(eventRepositoryProvider).loadPlans(eventId);
 });
 
+/// Katılımcının kendi planı (M8).
+///
+/// Plan yayında değilse boş bir sonuç dönüyor, hata değil: *"Oturma planınız
+/// henüz hazırlanıyor"* bir bekleme durumu.
+final myPlanProvider = FutureProvider.family<MyPlan, int>((ref, eventId) {
+  return ref.watch(eventRepositoryProvider).loadMyPlan(eventId);
+});
+
+/// Salon krokisi — kimin oturduğu yok. Düzen kurulmamışsa `null`.
+///
+/// Ayrı sağlayıcı: kroki yalnızca tur detayında gerekiyor, plan her
+/// yüklendiğinde çekmek gereksiz olurdu.
+final venueProvider = FutureProvider.family<Venue?, int>((ref, eventId) async {
+  try {
+    return await ref.watch(eventRepositoryProvider).loadVenue(eventId);
+  } on ApiException catch (error) {
+    if (error.statusCode == 404) return null;
+    rethrow;
+  }
+});
+
+/// Masa arkadaşının profili. Masa arkadaşı değilse sunucu 404 veriyor.
+final tablemateProvider =
+    FutureProvider.family<TablemateProfile, TablemateQuery>((ref, query) {
+  return ref
+      .watch(eventRepositoryProvider)
+      .loadTablemate(query.eventId, query.registrationId);
+});
+
+/// Masa arkadaşı sağlayıcısının argümanı.
+class TablemateQuery {
+  const TablemateQuery(this.eventId, this.registrationId);
+
+  final int eventId;
+  final int registrationId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TablemateQuery &&
+      other.eventId == eventId &&
+      other.registrationId == registrationId;
+
+  @override
+  int get hashCode => Object.hash(eventId, registrationId);
+}
+
 /// Tek bir plan versiyonu — önizleme ekranının özet paneli (M7).
 final planProvider =
     FutureProvider.family<PlanSummary, PlanQuery>((ref, query) {

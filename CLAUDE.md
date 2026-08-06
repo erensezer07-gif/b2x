@@ -120,7 +120,17 @@ Uyarılar bağımsız bir gözle sınanıyor: her takastan sonra plan `engine/ru
 
 Tarayıcıda doğrulandı (10 katılımcı / 5 masa × 3 sandalye / 4 tur): dört tur gezildi → takas → dört uyarı türü Türkçe → boş masaya taşıma → sabitleme → sabitlenmişi taşımada kırmızı ret şeridi → yayınla → "Yayında". İki dil hatası tarayıcıda yakalandı ve düzeltildi (aşağıdaki tuzaklar).
 
-**Sıradaki: Aşama 9 — Katılımcı deneyimi.** Katılımcının kendi programı, masa arkadaşları, eşleşme gerekçesi.
+**Aşama 9 bitti — katılımcı görünümü.**
+
+*Backend:* Üç uç — kendi planı, salon krokisi, masa arkadaşının profili. Hiçbiri kimlik parametresi almıyor; kimlik jetondan geliyor, başkasının planını istemek diye bir istek biçimi yok. Gerekçe üretimi `app/services/reasons.py`: kırılımdan en güçlü iki kalem, etiket adları okuma anında iki profilin kesişiminden. 341 test.
+
+*İstemci:* Slot listesi, tur detayı, oturansız salon krokisi, masa arkadaşı kartları ve Türkçe gerekçe cümleleri, tam profil. 135 test.
+
+Görünürlük canlı sunucuda arayüzsüz sınandı: yayınlanmamış planda kimlik taraması boş dönüyor, yayından sonra yalnızca masa arkadaşları açılıyor, kalan bütün kimlikler 404, iki katılımcı farklı plan görüyor, organizatör bu uçlardan bakamıyor, jetonsuz istek 401.
+
+Tarayıcıda doğrulandı: yayınlanmadan "Oturma planınız henüz hazırlanıyor" → yayınlandıktan sonra dört tur, saatler, masa numaraları ve isimler → tur detayında kroki (kendi masası vurgulu) → yön ayrımlı gerekçe cümleleri → tam profil → masa arkadaşı olmayanın profilinde "Bu kişi masa arkadaşın değil". İki dil pürüzü ve bir yeniden deneme davranışı orada yakalandı.
+
+**Sıradaki: Aşama 10 — Görüşme talepleri.** Katılımcı listesi, talep gönderme, hak sınırı, motora bonus olarak bağlanması.
 
 ### API uçları
 
@@ -157,6 +167,9 @@ GET   /events/{id}/plans/{pid}/slots/{slot}
 POST  /events/{id}/plans/{pid}/swap
 PATCH /events/{id}/plans/{pid}/assignments/{aid}
 POST  /events/{id}/plans/{pid}/publish
+
+GET /events/{id}/my-plan            GET /events/{id}/venue
+GET /events/{id}/tablemates/{rid}
 ```
 
 Çıkış ucu yok: jetonlar durumsuz, çıkış istemcide jetonu silmekle olur.
@@ -278,3 +291,14 @@ curl http://localhost:8000/health/ready   db ve redis'e erişiliyor mu
 **Kural ihlali takası engellemez.** M7 açıkça *"organizatör uyarıya rağmen devam edebilir"* diyor. `apply_swap` yalnızca sabitlenmiş atamayı reddediyor (409); kalan her şey `200` gövdesinde uyarı olarak dönüyor. Uyarı şeridi ile ret şeridi ayrı — biri "oldu ama dikkat", diğeri "olmadı".
 
 **Takastan sonra `match_reasons` tazelenmeli.** Takas daha önce yan yana gelmemiş ikililer üretiyor; satırlar yazılmazsa masa skoru yanlış çıkar ve Aşama 9'da katılımcıya olmayan bir gerekçe gösterilir. `_recompute_reasons` sinerji modelini yeniden kuruyor (200 kişi için ~10 ms).
+
+**Katılımcı yanıtına skor koyma.** `MySlotResponse` ve `TablemateResponse` organizatörün şemalarından ayrı; skor, kalite rozeti, kırılım hiçbirinde yok (M8: *"Uyum: %62 gibi bir ifade kullanılmaz"*). `test_no_score_leaks_into_the_participant_response` yanıtın tamamını tarıyor.
+
+**Katılımcı ucuna kimlik parametresi ekleme.** `/my-plan` ve `/tablemates/{rid}` kimliği jetondan alıyor. Parametre eklemek "başkasının planını iste" diye bir istek biçimi kurar; en ucuz güvenlik, isteğin kurulamaması.
+
+**Gerekçe için etiketin kategorisine kadar eager yükle.** `reasons._categories` etiketin kategori adını okuyor; `selectinload(Profile.tags).selectinload(ProfileTag.tag).selectinload(Tag.category)` zinciri eksikse doğrudan yanıt yolunda `MissingGreenlet` çıkar.
+
+**Türkçe cümlede sabit bağlaç kullanma.** Etiket adının kendisi "ve" içerebiliyor ("Veri analitiği ve raporlama"); `'X ve N alan daha'` çift bağlaç üretiyordu. Üç ve fazlasında virgül. Zamir de sayıya bağlı: "bunu / bunları".
+
+**İstemci hatası yeniden denenmiyor.** Riverpod 3 başarısız sağlayıcıları kendiliğinden tekrarlıyor; 4xx asla düzelmediği için hata ekranı saniyelerce gecikiyordu. `main.dart` içindeki `ProviderScope(retry: ...)` 4xx'i hiç denemiyor.
+

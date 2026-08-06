@@ -11,6 +11,7 @@ import 'discover_tab.dart';
 import 'event_controller.dart';
 import 'event_list_screen.dart';
 import 'models.dart';
+import 'my_plan_screen.dart';
 import 'schedule.dart';
 
 /// Katılımcının gördüğü etkinlik detayı ve başvuru akışı (şartname M3).
@@ -134,6 +135,20 @@ class _PublicEventScreenState extends ConsumerState<PublicEventScreen> {
           Text(
             _error!,
             style: theme.textTheme.bodyMedium?.copyWith(color: colors.error),
+          ),
+        ],
+
+        // Kabul edilen katılımcı planına buradan giriyor (M8). Plan yayında
+        // değilse ekran *"henüz hazırlanıyor"* diyor — kapı sunucuda.
+        if (event.myRegistration?.status == RegistrationStatus.accepted) ...[
+          const SizedBox(height: AppSpacing.lg),
+          FilledButton.icon(
+            onPressed: () => context.goNamed(
+              MyPlanScreen.routeName,
+              pathParameters: {'eventId': '${widget.eventId}'},
+            ),
+            icon: const Icon(Icons.event_seat_outlined),
+            label: const Text('Oturma planım'),
           ),
         ],
 

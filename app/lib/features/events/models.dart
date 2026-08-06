@@ -1009,3 +1009,280 @@ class RegistrationSummary {
 
   bool get isFull => remainingCapacity == 0;
 }
+
+// --- Katılımcı görünümü (M8) --------------------------------------------------
+
+/// Bir masa arkadaşıyla neden eşleştiğini anlatan tek bir gerekçe.
+///
+/// Sunucu anahtar ve adları gönderiyor, Türkçe cümle burada kuruluyor —
+/// Aşama 6-7-8'deki kalıp. **Sayı yok:** M8 açıkça yasaklıyor, *"Uyum: %62
+/// gibi bir ifade kullanılmaz. Sayı gören insan not almış gibi hisseder."*
+class MatchReason {
+  const MatchReason({required this.kind, required this.values});
+
+  factory MatchReason.fromJson(Map<String, dynamic> json) => MatchReason(
+        kind: json['kind'] as String,
+        values:
+            (json['values'] as List<dynamic>).map((item) => item as String).toList(),
+      );
+
+  final String kind;
+  final List<String> values;
+
+  /// Cümleye giren etiketler.
+  ///
+  /// Üç etiket birden yazılırsa cümle okunmaz uzunlukta oluyor. İlk ikisi
+  /// yazılıp gerisi sayıya dönüşüyor.
+  ///
+  /// **Üç ve fazlasında bağlaç değil virgül** kullanılıyor: etiket adının
+  /// kendisi "ve" içerebiliyor ("Veri analitiği ve raporlama") ve cümlede
+  /// "... raporlama ve 1 alan daha" diye çift bağlaç çıkıyordu. Tarayıcıda
+  /// görüldü.
+  String get _listed {
+    if (values.length <= 2) return values.join(' ve ');
+    return '${values.take(2).join(', ')}, ${values.length - 2} alan daha';
+  }
+
+  /// Tek etiket "bunu", birden fazlası "bunları".
+  String get _it => values.length > 1 ? 'bunları' : 'bunu';
+
+  /// Gerekçenin Türkçe karşılığı.
+  ///
+  /// Sunucu ileride yeni bir anahtar eklerse arayüz çökmemeli; tanınmayan
+  /// anahtar boş dönüyor ve o gerekçe hiç gösterilmiyor — uydurma bir cümle
+  /// yazmaktansa susmak doğru.
+  String get sentence => switch (kind) {
+        'they_offer' => 'Kendisi $_listed sunuyor, siz $_it arıyorsunuz.',
+        'you_offer' => 'Siz $_listed sunuyorsunuz, kendisi $_it arıyor.',
+        'shared_category' => 'İkiniz de $_listed alanındasınız.',
+        'same_sector' => 'İkiniz de $_listed sektöründesiniz.',
+        'same_city' => 'İkiniz de $_listed şehrindesiniz.',
+        'mutual_request' => 'İkiniz de görüşmek istemiştiniz.',
+        _ => '',
+      };
+}
+
+/// Masa arkadaşı kartı (M8: *"fotoğraf, ad, unvan, şirket"*).
+class Tablemate {
+  const Tablemate({
+    required this.registrationId,
+    required this.reasons,
+    this.fullName,
+    this.title,
+    this.company,
+    this.photoUrl,
+  });
+
+  factory Tablemate.fromJson(Map<String, dynamic> json) => Tablemate(
+        registrationId: json['registration_id'] as int,
+        reasons: (json['reasons'] as List<dynamic>)
+            .map((item) => MatchReason.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        fullName: json['full_name'] as String?,
+        title: json['title'] as String?,
+        company: json['company'] as String?,
+        photoUrl: json['photo_url'] as String?,
+      );
+
+  final int registrationId;
+  final List<MatchReason> reasons;
+  final String? fullName;
+  final String? title;
+  final String? company;
+  final String? photoUrl;
+
+  String get displayName => fullName ?? 'Adı girilmemiş';
+
+  /// Gösterilebilir gerekçeler — tanınmayan anahtarlar eleniyor.
+  List<String> get sentences =>
+      reasons.map((reason) => reason.sentence).where((text) => text.isNotEmpty).toList();
+}
+
+/// Katılımcının bir turu.
+class MySlot {
+  const MySlot({
+    required this.slotNumber,
+    required this.startsAt,
+    required this.endsAt,
+    required this.tablemates,
+    this.tableId,
+    this.tableNumber,
+    this.tableLabel,
+  });
+
+  factory MySlot.fromJson(Map<String, dynamic> json) => MySlot(
+        slotNumber: json['slot_number'] as int,
+        startsAt: DateTime.parse(json['starts_at'] as String).toLocal(),
+        endsAt: DateTime.parse(json['ends_at'] as String).toLocal(),
+        tablemates: (json['tablemates'] as List<dynamic>)
+            .map((item) => Tablemate.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        tableId: json['table_id'] as int?,
+        tableNumber: json['table_number'] as int?,
+        tableLabel: json['table_label'] as String?,
+      );
+
+  final int slotNumber;
+  final DateTime startsAt;
+  final DateTime endsAt;
+  final List<Tablemate> tablemates;
+  final int? tableId;
+  final int? tableNumber;
+  final String? tableLabel;
+
+  /// M8: *"Bir slotta eşleşmemişse o slot 'Bu turda serbestsin' olarak
+  /// gösterilir. Boş bırakılmaz, açıklama yazılır."*
+  bool get isFree => tableNumber == null;
+
+  String get tableTitle {
+    if (tableNumber == null) return 'Serbest';
+    final label = tableLabel;
+    return label == null || label.isEmpty ? 'Masa $tableNumber' : label;
+  }
+}
+
+/// Katılımcının gördüğü planın tamamı.
+class MyPlan {
+  const MyPlan({
+    required this.isPublished,
+    required this.slots,
+    this.planVersion,
+  });
+
+  factory MyPlan.fromJson(Map<String, dynamic> json) => MyPlan(
+        isPublished: json['is_published'] as bool,
+        planVersion: json['plan_version'] as int?,
+        slots: (json['slots'] as List<dynamic>)
+            .map((item) => MySlot.fromJson(item as Map<String, dynamic>))
+            .toList(),
+      );
+
+  final bool isPublished;
+  final int? planVersion;
+  final List<MySlot> slots;
+
+  /// Kaç turda birileriyle oturuyor.
+  int get seatedCount => slots.where((slot) => !slot.isFree).length;
+
+  int get meetingCount =>
+      slots.fold(0, (total, slot) => total + slot.tablemates.length);
+}
+
+/// Krokideki bir masa. **Kimin oturduğu yok.**
+class VenueTable {
+  const VenueTable({
+    required this.id,
+    required this.number,
+    this.label,
+    this.gridX,
+    this.gridY,
+  });
+
+  factory VenueTable.fromJson(Map<String, dynamic> json) => VenueTable(
+        id: json['id'] as int,
+        number: json['number'] as int,
+        label: json['label'] as String?,
+        gridX: json['grid_x'] as int?,
+        gridY: json['grid_y'] as int?,
+      );
+
+  final int id;
+  final int number;
+  final String? label;
+  final int? gridX;
+  final int? gridY;
+
+  bool get isPlaced => gridX != null && gridY != null;
+}
+
+/// Salon krokisi (M8).
+///
+/// Otomatik düzende ızgara yok — kroki çizilemez, yalnızca masa numarası
+/// gösterilir.
+class Venue {
+  const Venue({
+    required this.mode,
+    required this.tables,
+    required this.areas,
+    this.gridWidth,
+    this.gridHeight,
+  });
+
+  factory Venue.fromJson(Map<String, dynamic> json) => Venue(
+        mode: LayoutMode.fromKey(json['mode'] as String),
+        tables: (json['tables'] as List<dynamic>)
+            .map((item) => VenueTable.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        areas: (json['areas'] as List<dynamic>)
+            .map((item) => LayoutArea.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        gridWidth: json['grid_width'] as int?,
+        gridHeight: json['grid_height'] as int?,
+      );
+
+  final LayoutMode mode;
+  final List<VenueTable> tables;
+  final List<LayoutArea> areas;
+  final int? gridWidth;
+  final int? gridHeight;
+
+  /// Kroki çizilebilir mi: ızgara var ve en az bir masa yerleştirilmiş.
+  bool get hasSketch =>
+      gridWidth != null && gridHeight != null && tables.any((table) => table.isPlaced);
+}
+
+/// Masa arkadaşının tam profili (M8).
+class TablemateProfile {
+  const TablemateProfile({
+    required this.registrationId,
+    required this.offeredTags,
+    required this.soughtTags,
+    this.fullName,
+    this.title,
+    this.city,
+    this.bio,
+    this.photoUrl,
+    this.website,
+    this.linkedinUrl,
+    this.company,
+    this.sector,
+  });
+
+  factory TablemateProfile.fromJson(Map<String, dynamic> json) => TablemateProfile(
+        registrationId: json['registration_id'] as int,
+        offeredTags: (json['offered_tags'] as List<dynamic>)
+            .map((item) => Tag.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        soughtTags: (json['sought_tags'] as List<dynamic>)
+            .map((item) => Tag.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        fullName: json['full_name'] as String?,
+        title: json['title'] as String?,
+        city: json['city'] as String?,
+        bio: json['bio'] as String?,
+        photoUrl: json['photo_url'] as String?,
+        website: json['website'] as String?,
+        linkedinUrl: json['linkedin_url'] as String?,
+        company: json['company'] == null
+            ? null
+            : Company.fromJson(json['company'] as Map<String, dynamic>),
+        sector: json['sector'] == null
+            ? null
+            : Sector.fromJson(json['sector'] as Map<String, dynamic>),
+      );
+
+  final int registrationId;
+  final List<Tag> offeredTags;
+  final List<Tag> soughtTags;
+  final String? fullName;
+  final String? title;
+  final String? city;
+  final String? bio;
+  final String? photoUrl;
+  final String? website;
+  final String? linkedinUrl;
+  final Company? company;
+  final Sector? sector;
+
+  String get displayName => fullName ?? 'Adı girilmemiş';
+}

@@ -7,6 +7,7 @@ import '../../features/auth/register_screen.dart';
 import '../../features/events/event_list_screen.dart';
 import '../../features/events/layout/layout_editor_screen.dart';
 import '../../features/events/matching_screen.dart';
+import '../../features/events/my_plan_screen.dart';
 import '../../features/events/plan_screen.dart';
 import '../../features/events/public_event_screen.dart';
 import '../../features/events/registrations_screen.dart';
@@ -117,6 +118,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => PlanScreen(
           eventId: int.parse(state.pathParameters['eventId']!),
           planId: int.parse(state.pathParameters['planId']!),
+        ),
+      ),
+      // Katılımcının kendi planı (M8). Plan ekranı etkinlik detayının altında:
+      // katılımcı önce etkinliği görüyor, planına oradan giriyor.
+      GoRoute(
+        path: MyPlanScreen.routePath,
+        name: MyPlanScreen.routeName,
+        builder: (context, state) => MyPlanScreen(
+          eventId: int.parse(state.pathParameters['eventId']!),
+        ),
+      ),
+      GoRoute(
+        path: MySlotScreen.routePath,
+        name: MySlotScreen.routeName,
+        builder: (context, state) => MySlotScreen(
+          eventId: int.parse(state.pathParameters['eventId']!),
+          slotNumber: int.parse(state.pathParameters['slot']!),
+        ),
+      ),
+      GoRoute(
+        path: TablemateScreen.routePath,
+        name: TablemateScreen.routeName,
+        builder: (context, state) => TablemateScreen(
+          eventId: int.parse(state.pathParameters['eventId']!),
+          registrationId: int.parse(state.pathParameters['registrationId']!),
         ),
       ),
       // Katılımcının gördüğü etkinlik detayı. Yolu `/etkinlikler` altında

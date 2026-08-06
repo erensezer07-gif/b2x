@@ -2,13 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/api/api_exception.dart';
 import 'core/config/app_config.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/state_views.dart';
 
 void main() {
-  runApp(const ProviderScope(child: B2xApp()));
+  runApp(ProviderScope(retry: _retryDelay, child: const B2xApp()));
+}
+
+/// Başarısız bir sağlayıcı ne zaman yeniden denenmeli.
+///
+/// Riverpod başarısız sağlayıcıları kendiliğinden yeniden deniyor. Geçici bir
+/// ağ kesintisinde bu doğru davranış — ama **istemci hatası asla düzelmez.**
+/// 404 dönen bir isteği beş kez tekrarlamak hem boşuna hem de kullanıcıyı
+/// saniyelerce dönen bir çarkla oyalıyor: hata ekranı ancak denemeler
+/// yavaşlayınca çıkıyor. Tarayıcıda görüldü.
+///
+/// `null` dönmek "bir daha deneme" demek.
+Duration? _retryDelay(int retryCount, Object error) {
+  if (error is ApiException) {
+    final status = error.statusCode ?? 0;
+    if (status >= 400 && status < 500) return null;
+  }
+  if (retryCount >= 3) return null;
+  return Duration(milliseconds: 300 * (1 << retryCount));
 }
 
 /// Uygulamanın kökü.

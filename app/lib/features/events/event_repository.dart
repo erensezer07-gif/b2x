@@ -357,4 +357,26 @@ class EventRepository {
       await _api.post('/events/$eventId/plans/$planId/publish'),
     );
   }
+
+  // --- Katılımcı görünümü (M8) -----------------------------------------------
+
+  /// Katılımcının kendi planı.
+  ///
+  /// Kimlik gönderilmiyor: sunucu jetondan alıyor. Plan yayında değilse
+  /// `isPublished` yanlış ve tur listesi boş geliyor (Bölüm 7).
+  Future<MyPlan> loadMyPlan(int eventId) async {
+    return MyPlan.fromJson(await _api.getObject('/events/$eventId/my-plan'));
+  }
+
+  /// Salon krokisi — kimin oturduğu yok.
+  Future<Venue> loadVenue(int eventId) async {
+    return Venue.fromJson(await _api.getObject('/events/$eventId/venue'));
+  }
+
+  /// Masa arkadaşının tam profili. Masa arkadaşı değilse sunucu 404 döner.
+  Future<TablemateProfile> loadTablemate(int eventId, int registrationId) async {
+    return TablemateProfile.fromJson(
+      await _api.getObject('/events/$eventId/tablemates/$registrationId'),
+    );
+  }
 }
