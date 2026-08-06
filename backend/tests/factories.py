@@ -14,6 +14,7 @@ from app.models import (
     Company,
     Event,
     EventStatus,
+    JobStatus,
     Layout,
     LayoutMode,
     Plan,
@@ -118,10 +119,15 @@ async def create_plan(
     version: int = 1,
     status: PlanStatus = PlanStatus.DRAFT,
 ) -> Plan:
+    # Yayınlanmış veya arşivlenmiş bir planın hesabı bitmiş olmak zorunda:
+    # `published_needs_finished_job` kısıtı bunu şart koşuyor (Aşama 7).
+    # Taslak plan kuyrukta bekliyor olabilir.
+    finished = status is not PlanStatus.DRAFT
     plan = Plan(
         event_id=event.id,
         version=version,
         status=status,
+        job_status=JobStatus.DONE if finished else JobStatus.QUEUED,
         published_at=datetime.now(UTC) if status is PlanStatus.PUBLISHED else None,
         seed=42,
     )

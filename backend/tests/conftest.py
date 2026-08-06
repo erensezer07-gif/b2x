@@ -28,6 +28,22 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_DIR.parent
 
+
+class RecordingJobQueue:
+    """Testlerde gerçek kuyruğun yerine geçer.
+
+    İşi atmaz, yalnızca kaydeder. Motorun kendisi testlerde `execute_plan`
+    doğrudan çağrılarak çalıştırılıyor; kuyruk altyapı, ürün mantığı değil.
+    """
+
+    def __init__(self) -> None:
+        self.jobs: list[tuple[str, tuple[object, ...]]] = []
+
+    async def enqueue(self, name: str, *args: object) -> str:
+        self.jobs.append((name, args))
+        return f"test-job-{len(self.jobs)}"
+
+
 # `.env` yoksa uygulama modülleri import bile edilemezdi (gizli ayarların
 # varsayılanı yok). Bu değerler yalnızca o durumda devreye girer. `.env` varsa
 # gerçek yapılandırma kullanılır ve kısıt testleri de çalışabilir.
@@ -145,11 +161,16 @@ async def client(session: AsyncSession) -> AsyncGenerator[AsyncClient]:
     """
     from app.db import get_session
     from app.main import app
+    from app.services.queue import get_job_queue
 
     async def use_test_session() -> AsyncGenerator[AsyncSession]:
         yield session
 
     app.dependency_overrides[get_session] = use_test_session
+    # Kuyruk da devralınıyor: gerçek Redis'e iş atılırsa testin planı geri
+    # alınır ama iş kuyrukta kalır. İşçi onu bulamayıp uyarı yazar — testler
+    # üretim altyapısını kirletmemeli (5.4).
+    app.dependency_overrides[get_job_queue] = lambda: RecordingJobQueue()
     try:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"

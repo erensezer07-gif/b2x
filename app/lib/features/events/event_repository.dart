@@ -270,4 +270,35 @@ class EventRepository {
       await _api.post('/events/$eventId/registrations/$registrationId/reject'),
     );
   }
+
+  // --- Eşleştirme (M6, 5.4) --------------------------------------------------
+
+  /// Çalıştırma öncesi kontrol listesi.
+  Future<MatchingCheck> loadMatchingCheck(int eventId) async {
+    return MatchingCheck.fromJson(
+      await _api.getObject('/events/$eventId/matching-check'),
+    );
+  }
+
+  /// Eşleştirmeyi kuyruğa atar.
+  ///
+  /// Anında dönüyor; plan `queued` durumunda. Sonuç `loadPlan` ile izleniyor.
+  Future<PlanSummary> runMatching(int eventId, {int? seed}) async {
+    return PlanSummary.fromJson(
+      await _api.post('/events/$eventId/plans', body: {'seed': ?seed}),
+    );
+  }
+
+  Future<List<PlanSummary>> loadPlans(int eventId) async {
+    final results = await _api.getList('/events/$eventId/plans');
+    return results
+        .map((item) => PlanSummary.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<PlanSummary> loadPlan(int eventId, int planId) async {
+    return PlanSummary.fromJson(
+      await _api.getObject('/events/$eventId/plans/$planId'),
+    );
+  }
 }

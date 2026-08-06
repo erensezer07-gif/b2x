@@ -78,6 +78,18 @@ class RegistrationQuery {
   int get hashCode => Object.hash(eventId, status);
 }
 
+/// Çalıştırma öncesi kontrol listesi (M6).
+final matchingCheckProvider =
+    FutureProvider.family<MatchingCheck, int>((ref, eventId) {
+  return ref.watch(eventRepositoryProvider).loadMatchingCheck(eventId);
+});
+
+/// Etkinliğin plan versiyonları, yenisi önce.
+final eventPlansProvider =
+    FutureProvider.family<List<PlanSummary>, int>((ref, eventId) {
+  return ref.watch(eventRepositoryProvider).loadPlans(eventId);
+});
+
 /// Etkinliği değiştiren işlemler.
 ///
 /// Depoyu sarmalayıp değişiklikten sonra ilgili sağlayıcıları tazeliyor.
@@ -263,4 +275,71 @@ class RegistrationActions {
 final registrationActionsProvider =
     Provider.family<RegistrationActions, int>((ref, eventId) {
   return RegistrationActions(ref, eventId);
+});
+
+/// Eşleştirmeyi çalıştıran ve durumunu izleyen işlemler (M6, 5.4).
+class MatchingActions {
+  const MatchingActions(this._ref, this.eventId);
+
+  /// İki yoklama arası bekleme.
+  ///
+  /// Motor 200 kişide birkaç saniye sürüyor (9.9); saniyede bir sormak hem
+  /// yeterince canlı hem de sunucuyu yormuyor. Sunucu iteklemesi (websocket)
+  /// bu iş için fazla altyapı olurdu — organizatör ekranda bekliyor, sayfa
+  /// zaten açık.
+  static const pollInterval = Duration(seconds: 1);
+
+  /// Yoklamanın vazgeçme sınırı.
+  ///
+  /// İşçi hiç çalışmıyorsa plan sonsuza kadar `queued` kalır. Kullanıcıyı
+  /// dönen bir çarkla baş başa bırakmamak için bir noktada durup ne olduğunu
+  /// söylemek gerekiyor.
+  static const pollTimeout = Duration(minutes: 5);
+
+  final Ref _ref;
+  final int eventId;
+
+  EventRepository get _repository => _ref.read(eventRepositoryProvider);
+
+  /// Yeni bir plan versiyonu açar ve hesabı kuyruğa atar.
+  Future<PlanSummary> run({int? seed}) async {
+    final plan = await _repository.runMatching(eventId, seed: seed);
+    _ref.invalidate(eventPlansProvider(eventId));
+    return plan;
+  }
+
+  /// Hesap bitene kadar yoklar.
+  ///
+  /// Her adımda `onUpdate` çağrılıyor: ekran "kuyrukta"dan "çalışıyor"a
+  /// geçişi göstermeli, yoksa kullanıcı bir şey olup olmadığını anlamaz.
+  Future<PlanSummary> waitForResult(
+    int planId, {
+    required void Function(PlanSummary) onUpdate,
+    required bool Function() shouldContinue,
+  }) async {
+    final deadline = DateTime.now().add(pollTimeout);
+    var plan = await _repository.loadPlan(eventId, planId);
+    onUpdate(plan);
+
+    while (plan.isPending && shouldContinue()) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw const ApiException(
+          'Eşleştirme uzun süredir kuyrukta. Arka plan işçisi çalışmıyor '
+          'olabilir.',
+        );
+      }
+      await Future<void>.delayed(pollInterval);
+      if (!shouldContinue()) break;
+      plan = await _repository.loadPlan(eventId, planId);
+      onUpdate(plan);
+    }
+
+    _ref.invalidate(eventPlansProvider(eventId));
+    return plan;
+  }
+}
+
+final matchingActionsProvider =
+    Provider.family<MatchingActions, int>((ref, eventId) {
+  return MatchingActions(ref, eventId);
 });

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import TokenError, TokenType, decode_token
 from app.db import get_session
 from app.models import Event, User
+from app.services.queue import JobQueue, get_job_queue
 from app.services.storage import Storage, get_storage
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -23,6 +24,10 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 # görüyor (Bölüm 3) ve testler `dependency_overrides` ile geçici bir klasöre
 # yönlendirebiliyor.
 StorageDep = Annotated[Storage, Depends(get_storage)]
+
+# İş kuyruğu aynı gerekçeyle bağımlılık: testler gerçek Redis'e iş atmamalı
+# (5.4). Ayrıntı `app/services/queue.py` başlığında.
+JobQueueDep = Annotated[JobQueue, Depends(get_job_queue)]
 
 # `auto_error=False`: eksik başlığı da kendimiz yanıtlıyoruz ki mesaj Türkçe
 # olsun ve "jeton yok" ile "jeton geçersiz" aynı cevabı versin.

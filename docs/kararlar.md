@@ -994,6 +994,163 @@ düşürürdü.
 pahalı bir hata — yanlış güne uçak bileti alınır. `formatDate` ay adını
 yazıyor ve etkinlik listesi de ona geçti.
 
+### Kategori düzeyinde kısmi puan — katsayı 0.30, doyum 1
+
+Aşama 6'da havuzun 72'de tıkandığını ölçmüştük. Sebep: etiket havuzu
+büyüdükçe alıcıyla satıcının **aynı kelimeyi** seçme olasılığı düşüyor.
+Motora ikinci bir okuma düzeyi eklendi — tam eşleşme yoksa etiketlerin
+kategorileri karşılaştırılıyor.
+
+İki parametre var ve ikisi de ölçüldü. 200 katılımcı / 8 tur / 50 masa,
+kişi başı 3 etiket, 9 kategori, aynı tohum. Değerler ortalama masa skoru:
+
+**Kategori doyumu 1** (bir ortak kategori tam kredi):
+
+| Havuz | katsayı 0.0 | 0.15 | **0.30** |
+|---|---|---|---|
+| 72 | 0.338 | 0.326 | **0.362** |
+| 120 | 0.076 | 0.098 | **0.317** |
+| 200 | 0.048 | 0.066 | **0.142** |
+| 300 | 0.023 | 0.036 | **0.112** |
+
+**Kategori doyumu 2** (iki ortak kategori tam kredi):
+
+| Havuz | katsayı 0.0 | 0.15 | 0.30 |
+|---|---|---|---|
+| 72 | 0.338 | 0.332 | 0.304 |
+| 120 | 0.076 | 0.092 | 0.128 |
+| 200 | 0.048 | 0.065 | 0.090 |
+| 300 | 0.023 | 0.032 | 0.051 |
+
+**Doyum 1 her noktada daha iyi.** Sebebi basit: kişi başı asgari üç etiket
+(M2) pratikte bir ya da iki kategoriye düşüyor, iki ortak kategori nadir.
+Doyum 2'de tek ortak kategori yalnızca yarım puan alıyor ve kısmi puan
+etkisiz kalıyor — 72'de zarar bile veriyor (0.304 < 0.338).
+
+**Katsayı 0.30, doyum 1 ile 120 etiketlik havuz bugünkü 72'lik havuz kadar
+iyi** (0.317 ≈ 0.338). Tavan gerçekten yükseliyor. 200 ve 300 hâlâ bozuluyor
+ama üç ila beş kat daha az.
+
+**Katsayının üst sınırı `1 / supply_demand_saturation` = 0.333.** Kategori
+örtüşmesi tek bir tam etiket eşleşmesini geçmemeli: bir tam eşleşme, "aynı
+alandayız"dan daha güçlü bir kanıt. Bir test bu sınırı koruyor — ilk denemede
+0.35 yazılmıştı ve test yakaladı.
+
+**Katsayı 0 iken davranış birebir eskisi.** Değişiklik tek sayıyla geri
+alınabilir; ayrı bir test bunu kilitliyor.
+
+### Kategori ayrı bir kırılım kalemi, bayrak değil
+
+İlk yazımda `category_only` diye bir anahtar eklemiştim: puan değil, "bu skor
+kategoriden geldi" bilgisini taşıyan bir bayrak. Bu, `explain()` sözleşmesini
+bozuyordu — kırılım katkılarının toplamı skora eşit olmalı, bayrak toplamı
+şişiriyordu. Mevcut bir test (`test_breakdown_matches_the_matrix`) yalnızca
+tam eşleşmeli senaryolarda çalıştığı için yakalamamıştı.
+
+Şimdi `category` gerçek bir katkı kalemi: arz-talep bileşeni iki kez
+hesaplanıyor (kategorili ve kategorisiz), farkı "kategori sayesinde kazanılan
+puan" olarak ayrı yazılıyor. Toplam korunuyor, arayüz de doğru cümleyi
+kurabiliyor: *"Sen X sunuyorsun, o X arıyor"* ile *"İkiniz de Y alanındasınız"*
+aynı şey değil (M8).
+
+### Hesabın durumu plandan ayrı bir alan
+
+Bölüm 5.4 *"işin durumu takip edilebilir olmalı: kuyrukta / çalışıyor / bitti
+/ hata"* diyor ama Bölüm 6'daki `plans` alan listesinde böyle bir alan yok.
+Migration `0004` ile eklendi: `job_status`, `job_error`, `job_id`.
+
+`status` **planın** durumu (taslak / yayında / arşiv), `job_status`
+**hesabın**. İkisi bağımsız: hesabı bitmiş bir plan hâlâ taslaktır,
+organizatör inceleyip yayınlayana kadar öyle kalır. Tek alanda toplamak Bölüm
+13'ün "plan görünürlüğünü etkinlik durumundan okumak" hatasının kardeşi
+olurdu.
+
+Yeni CHECK: hesabı bitmemiş plan yayınlanamaz. Yarım bir planı katılımcıya
+göstermek Bölüm 7'yi ihlal ederdi. Bu kısıt Aşama 1'in iki testini kırdı —
+fabrika yayındaki planı `queued` durumunda üretiyordu; fabrika düzeltildi,
+kısıt kaldı.
+
+### Plan satırı iş kuyruğa girer girmez oluşuyor
+
+Uç `202` dönüyor, `201` değil: kaynak oluştu ama işi bitmedi. Alternatif,
+motor bitene kadar beklemekti — 200 kişilik etkinlikte saniyeler sürüyor,
+istek zaman aşımına uğrardı (5.4).
+
+Sonucu: plan var ama içi boş. Özet alanları Aşama 1'den beri bu yüzden boş
+geçilebilir; o karar bugün karşılığını buldu.
+
+**Aynı anda ikinci çalıştırma engelleniyor.** İki iş paralel çalışırsa
+hangisinin kazandığı belirsiz olur ve 5.3'ün determinizm sözü anlamını
+yitirir.
+
+### Kuyruğa ulaşılamaması isteği düşürmüyor
+
+Redis kapalıysa `enqueue` `None` dönüyor, hata fırlatmıyor. Plan satırı zaten
+yazıldı ve `queued` durumunda; organizatör ekranda "kuyrukta" görür, işçi
+ayağa kalkınca iş işlenir. Orada patlamak yeni bir plan versiyonunu boşuna
+harcardı.
+
+### İş kuyruğu da bağımlılık — testler altyapıya dokunmamalı
+
+İlk yazımda uç doğrudan `create_pool` çağırıyordu. Sonuç: her uç testi gerçek
+Redis'e iş atıyordu. Test işlemi geri alındığı için plan satırı yok oluyor,
+işçi de "Plan bulunamadı" diye uyarı yazıyordu — altmış hayalet iş birikmişti.
+
+`app/services/queue.py` depolama arayüzüyle aynı kalıbı izliyor: soyut
+`JobQueue`, `RedisJobQueue` uygulaması, `get_job_queue()` bağımlılığı.
+Testler `dependency_overrides` ile kaydeden bir sahte kuyruk veriyor.
+
+CLAUDE.md'de bu ders zaten yazılıydı (`StorageDep`); ikinci kez aynı tuzağa
+düşüldü. Uzun süren bir dış bağımlılık eklerken önce bu soru sorulmalı.
+
+### Motor ayrı iş parçacığında çalışıyor
+
+`run_matching` senkron ve CPU'ya bağlı. Doğrudan `await` edilseydi olay
+döngüsünü saniyelerce kilitler, aynı işçideki diğer işler beklerdi.
+`asyncio.to_thread` ile ayrı bir iş parçacığına veriliyor.
+
+### `rollback` sonrası nesneye değil kimliğe tutun
+
+Hata yolunda `_fail(session, plan, ...)` yazmıştım. `rollback` bütün
+nesnelerin süresini doldurur; `plan.id` okumak eşzamansız bir yeniden yükleme
+tetikliyor ve SQLAlchemy bunu `MissingGreenlet` ile reddediyor — hata
+işleyicisinin kendisi hata veriyordu.
+
+Fonksiyon artık kimlik alıyor. Düz bir sayının süresi dolmaz.
+
+### İş durumu yoklanıyor, itilmiyor
+
+Motor birkaç saniye sürüyor (9.9) ve organizatör ekranda bekliyor. Saniyede
+bir `GET /plans/{id}` sormak hem yeterince canlı hem sunucuyu yormuyor.
+Websocket bu iş için fazla altyapı olurdu: sayfa zaten açık, bekleyen tek
+kişi var ve süre saniyelerle ölçülüyor.
+
+**Vazgeçme sınırı beş dakika.** İşçi hiç çalışmıyorsa plan sonsuza kadar
+`queued` kalır; kullanıcıyı dönen bir çarkla baş başa bırakmamak için bir
+noktada durup sebebini söylemek gerekiyor — mesaj işçiyi işaret ediyor, en sık
+atlanan adım o.
+
+**Ekran kapandıysa yoklama duruyor.** `shouldContinue` bayrağı olmasaydı
+kapalı bir ekrana veri yazılmaya çalışılırdı.
+
+### Eşleştirme ekranı sihirbazın adımı değil
+
+Sihirbaz etkinliği **kurmak** için; eşleştirme kurulduktan sonra, defalarca
+yapılan bir iş. Beşinci adım yapmak sihirbazı hiç bitmeyen bir şeye
+çevirirdi. Etkinlik kartında iki simge var: başvurular ve eşleştirme.
+
+Ekran özeti gösterip duruyor. Plan önizleme ve elle düzeltme Aşama 8'in
+konusu; buradan oraya bağlanacak.
+
+### Kategori sayısı etiketle birlikte artmamalı
+
+Havuz büyürken kategori sayısı da büyütülürse kısmi puanın etkisi kayboluyor:
+kategori örtüşmesi de etiket örtüşmesi kadar seyrekleşiyor. Ölçümde 200
+etiket / 25 kategori 0.090 verirken, 200 etiket / 9 kategori 0.142 veriyor.
+
+Kural: etiket eklerken **mevcut kategorilere** ekle. Yeni kategori ancak
+gerçekten yeni bir işlev alanı varsa açılır.
+
 ### FastAPI'nin İngilizce varsayılanları eleniyor
 
 Kendi yazdığımız her hata mesajı Türkçe. FastAPI tanımadığı bir yola istek

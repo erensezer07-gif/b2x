@@ -7,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/state_views.dart';
 import 'discover_tab.dart';
 import 'event_controller.dart';
+import 'matching_screen.dart';
 import 'models.dart';
 import 'registrations_screen.dart';
 import 'schedule.dart';
@@ -172,17 +173,31 @@ class _EventCard extends StatelessWidget {
             ],
           ),
         ),
-        // Başvurular ayrı bir yol: kart sihirbaza götürüyor, bu düğme onay
-        // ekranına. Kayıtlar açılmadan başvuru olamaz, o yüzden taslakta yok.
+        // Kart sihirbaza götürüyor; bu düğmeler organizatörün diğer iki
+        // ekranına. Kayıtlar açılmadan ikisi de anlamsız, o yüzden taslakta
+        // yalnızca ok var.
         trailing: event.status == EventStatus.draft
             ? const Icon(Icons.chevron_right)
-            : IconButton(
-                icon: const Icon(Icons.how_to_reg_outlined),
-                tooltip: 'Başvurular',
-                onPressed: () => context.goNamed(
-                  RegistrationsScreen.routeName,
-                  pathParameters: {'eventId': '${event.id}'},
-                ),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.how_to_reg_outlined),
+                    tooltip: 'Başvurular',
+                    onPressed: () => context.goNamed(
+                      RegistrationsScreen.routeName,
+                      pathParameters: {'eventId': '${event.id}'},
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    tooltip: 'Eşleştirme',
+                    onPressed: () => context.goNamed(
+                      MatchingScreen.routeName,
+                      pathParameters: {'eventId': '${event.id}'},
+                    ),
+                  ),
+                ],
               ),
         onTap: () => context.goNamed(
           EventWizardScreen.routeName,

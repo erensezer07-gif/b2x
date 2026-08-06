@@ -6,6 +6,7 @@ import '../../features/auth/login_screen.dart';
 import '../../features/auth/register_screen.dart';
 import '../../features/events/event_list_screen.dart';
 import '../../features/events/layout/layout_editor_screen.dart';
+import '../../features/events/matching_screen.dart';
 import '../../features/events/public_event_screen.dart';
 import '../../features/events/registrations_screen.dart';
 import '../../features/events/wizard/event_wizard_screen.dart';
@@ -96,6 +97,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: RegistrationsScreen.routePath,
         name: RegistrationsScreen.routeName,
         builder: (context, state) => RegistrationsScreen(
+          eventId: int.parse(state.pathParameters['eventId']!),
+        ),
+      ),
+      // Eşleştirmeyi çalıştırma ekranı (M6).
+      GoRoute(
+        path: MatchingScreen.routePath,
+        name: MatchingScreen.routeName,
+        builder: (context, state) => MatchingScreen(
           eventId: int.parse(state.pathParameters['eventId']!),
         ),
       ),

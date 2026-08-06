@@ -24,6 +24,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -31,7 +33,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, IdMixin, TimestampMixin
-from app.models.enums import PlanStatus, status_check, status_column
+from app.models.enums import JobStatus, PlanStatus, status_check, status_column
 
 if TYPE_CHECKING:
     from app.models.event import Event
@@ -64,7 +66,14 @@ class Plan(IdMixin, TimestampMixin, Base):
             "status <> 'published' OR published_at IS NOT NULL",
             name="published_has_publish_time",
         ),
+        # Hesap bitmeden plan yayınlanamaz: yarım bir plan katılımcıya
+        # gösterilemez (5.4, Bölüm 7).
+        CheckConstraint(
+            "status <> 'published' OR job_status = 'done'",
+            name="published_needs_finished_job",
+        ),
         status_check("status", PlanStatus, "plan_status"),
+        status_check("job_status", JobStatus, "job_status"),
     )
 
     event_id: Mapped[int] = mapped_column(
@@ -81,6 +90,24 @@ class Plan(IdMixin, TimestampMixin, Base):
     # Motor deterministiktir (şartname 5.3): aynı girdi ve aynı tohum aynı sonucu
     # verir. Tohum planla birlikte saklanmazsa sonuç tekrar üretilemez.
     seed: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # --- Hesabın durumu (şartname 5.4) ---
+    #
+    # *"İşin durumu takip edilebilir olmalı: kuyrukta / çalışıyor / bitti /
+    # hata."* Planın kendi durumundan ayrı: plan satırı iş kuyruğa girer girmez
+    # oluşuyor, motor sonra çalışıyor. O aralıkta plan var ama içi boş.
+    job_status: Mapped[JobStatus] = mapped_column(
+        status_column(JobStatus, "job_status"),
+        nullable=False,
+        server_default=text(f"'{JobStatus.QUEUED.value}'"),
+    )
+
+    # Hata mesajı — yalnızca `failed` durumunda dolu. Organizatör "neden
+    # çalışmadı" sorusunun cevabını ekranda görmeli.
+    job_error: Mapped[str | None] = mapped_column(Text)
+
+    # Kuyruk kimliği. İşin akıbetini kuyruk tarafından da izleyebilmek için.
+    job_id: Mapped[str | None] = mapped_column(String(64))
 
     # Hesaplama özeti. Motor çalışmadan önce plan satırı oluşabildiği için
     # (Aşama 7'de iş kuyruğa girer, sonra biter) hepsi boş geçilebilir.

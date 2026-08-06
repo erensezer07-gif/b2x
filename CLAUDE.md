@@ -98,7 +98,19 @@ Aşama 3'te kurulan başvuru kapısı burada ilk kez iş görüyor: eksik profil
 
 Tarayıcıda doğrulandı: keşif listesi → eksik profille başvuru engellendi ve eksikler listelendi → profil tamamlanınca başvuru → organizatör profil özetiyle gördü ve onayladı → katılımcıda "Kabul edildi" → kontenjan dolunca onay düğmesi "Kontenjan dolu".
 
-**Sıradaki: Aşama 7 — Motorun bağlanması.** Arka plan işi, veritabanı↔motor dönüşümü, plan üretimi.
+**Aşama 7 bitti — motor bağlandı.**
+
+*Motor:* Kategori düzeyinde kısmi puan (9.3). Tam etiket eşleşmesi tam puan, aynı kategoride buluşma kısmi puan. Katsayı 0.30, doyum 1 — ölçülerek seçildi. Etiket havuzunun tavanı 72'den ~120'ye çıktı.
+
+*Backend:* Veritabanı↔motor dönüşümü, arka plan işi (ARQ), plan versiyonlama, kontrol listesi. `plans` tablosuna hesabın durumu eklendi (migration `0004`). 280 test.
+
+*İstemci:* Kontrol listesi, çalıştırma, durum izleme, özet, versiyon geçmişi. 73 test.
+
+Gerçek veriyle doğrulandı (24 katılımcı / 8 şirket / 6 masa / 5 tur): kuyrukta → çalışıyor → bitti, 96 atama, herkes en az 4 turda oturmuş, **kesin kural ihlali sıfır** (aynı kişi iki masada, kapasite aşımı, aynı şirket aynı masada, tek kişilik masa).
+
+Tarayıcıda doğrulandı: kontrol listesi ve Türkçe uyarı → çalıştır → "Kuyrukta" → "Bitti" + özet → ikinci çalıştırma versiyon 2 ve geçmiş. Aynı tohum iki kez aynı sonucu verdi (5.3).
+
+**Sıradaki: Aşama 8 — Plan önizleme ve düzeltme.** Slot görünümü, takas, kural uyarıları, sabitleme, yayınlama.
 
 ### API uçları
 
@@ -127,6 +139,9 @@ POST   /events/{id}/registration        DELETE /events/{id}/registration
 GET    /events/{id}/registrations?status=
 POST   /events/{id}/registrations/{rid}/approve
 POST   /events/{id}/registrations/{rid}/reject
+
+GET  /events/{id}/matching-check
+POST /events/{id}/plans      GET /events/{id}/plans      GET /events/{id}/plans/{pid}
 ```
 
 Çıkış ucu yok: jetonlar durumsuz, çıkış istemcide jetonu silmekle olur.
@@ -213,13 +228,21 @@ curl http://localhost:8000/health/ready   db ve redis'e erişiliyor mu
 
 **Program hesabı iki yerde: `schedule.py` ve `schedule.dart`.** Birini değiştirirsen diğerini de değiştir; aynı senaryolar iki tarafta da test ediliyor (`test_schedule.py`, `schedule_test.dart`).
 
+**Uzun süren dış bağımlılığı bağımlılık olarak ver.** Depolama (`StorageDep`) ve kuyruk (`JobQueueDep`) böyle; testler `dependency_overrides` ile sahtesini koyuyor. Kuyruk ilk yazımda doğrudan çağrılmıştı ve her uç testi gerçek Redis'e iş atıyordu — altmış hayalet iş birikti.
+
+**`rollback` sonrası ORM nesnesine dokunma.** Bütün nesnelerin süresi dolar; bir alanı okumak eşzamansız yeniden yükleme tetikler ve `MissingGreenlet` verir. Hata yolunda nesne değil kimlik taşı — `plan_runner._fail` bu yüzden `plan_id` alıyor.
+
+**`arq app.worker.WorkerSettings` çalışmıyorsa eşleştirme kuyrukta bekler.** Plan `queued` durumunda kalır, hata vermez. Geliştirirken en sık atlanan adım.
+
 **Sabit yollu uç, parametreli uçtan önce kaydedilmeli.** `main.py` içinde `registration.router`, `event.router`'dan önce geliyor; tersi olsaydı `/events/discover` yolu `/events/{event_id}` ile eşleşir ve "discover" bir kimlik sanılıp 422 dönerdi.
 
 **Katılımcıya `EventResponse` döndürme.** O şema organizatörün alanlarını taşıyor (`auto_approve_registrations`, `request_quota`, `capacity_summary`). Katılımcının gördüğü `PublicEventResponse` ayrı — alan gizlemek yerine ayrı şema, ileride organizatör yanıtına eklenen bir alan sessizce dışarı çıkmasın diye.
 
 **Süzgeçli listede tek süzgeci tazeleme.** `eventRegistrationsProvider` süzgeci argümanında tutuyor, yani her süzgeç ayrı bir önbellek. Onaylanan başvuru "bekleyen"den düşüp "kabul"e girmeli; `RegistrationActions._invalidateRegistrations` hepsini birden tazeliyor.
 
-**Etiket havuzuna etiket eklemeden önce ölç.** 72 bir tavan: kişi başı asgari seçim 3 olduğu sürece havuz büyüdükçe eşleşme çöküyor (84'te ortalama masa skoru 0.337'den 0.095'e düşüyor). Ölçüm komutu `python -m engine.cli --etiket <n> --secim 3`. Ayrıntı `docs/kararlar.md`'de.
+**Etiket eklerken mevcut kategorilere ekle.** Kategori düzeyinde kısmi puan (9.3) havuzun tavanını 72'den ~120'ye çıkardı, ama yalnızca kategori sayısı 9-15'te kalırsa: kategoriler etiketlerle birlikte çoğalırsa örtüşme yine seyrekleşir ve kazanç kaybolur. Ölçüm komutu `python -m engine.cli --etiket <n> --kategori <k> --secim 3`. Ayrıntı `docs/kararlar.md`'de.
+
+**`explain()` kırılımına puan olmayan bir şey koyma.** Katkıların toplamı skora eşit olmalı; `test_breakdown_matches_the_matrix` bunu kontrol ediyor ama yalnızca kendi senaryolarında. Bayrak niteliğinde bir bilgi gerekiyorsa gerçek bir katkı kalemine dönüştürülmeli — `category` böyle yapıldı.
 
 **Etiket silme. Yalnızca ekle.** `profile_tags` etiket kimliğine bakıyor; silinen etiketi seçmiş profiller etkilenir. Ad düzeltmek serbest, kimlik aynı kalıyor.
 

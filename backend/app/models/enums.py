@@ -112,3 +112,21 @@ class PlanStatus(StrEnum):
     DRAFT = "draft"
     PUBLISHED = "published"
     ARCHIVED = "archived"
+
+
+class JobStatus(StrEnum):
+    """Eşleştirme hesabının durumu (şartname 5.4).
+
+    **Plan durumuyla karıştırılmamalı.** `PlanStatus` planın kendisini anlatır
+    (taslak / yayında / arşiv), bu ise onu üreten **hesabın** nerede olduğunu.
+    Bir plan hesabı bitmiş (`DONE`) ama hâlâ taslak olabilir; organizatör
+    inceleyip yayınlayana kadar öyle kalır.
+
+    İkisini tek alanda toplamak Bölüm 13'ün "plan görünürlüğünü etkinlik
+    durumundan okumak" hatasının kardeşi olurdu.
+    """
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"

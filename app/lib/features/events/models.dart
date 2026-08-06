@@ -329,6 +329,179 @@ class EventLayout {
       tables.fold(0, (highest, table) => table.number > highest ? table.number : highest) + 1;
 }
 
+// --- Eşleştirme (M6, 5.4) ----------------------------------------------------
+
+/// Eşleştirme hesabının durumu.
+///
+/// **Plan durumundan ayrı.** `PlanStatus` planın kendisini anlatır, bu ise onu
+/// üreten hesabın nerede olduğunu. Hesabı bitmiş bir plan hâlâ taslak olabilir.
+enum JobStatus {
+  queued('queued', 'Kuyrukta'),
+  running('running', 'Çalışıyor'),
+  done('done', 'Bitti'),
+  failed('failed', 'Hata');
+
+  const JobStatus(this.key, this.label);
+
+  final String key;
+  final String label;
+
+  static JobStatus fromKey(String key) => JobStatus.values.firstWhere(
+        (item) => item.key == key,
+        orElse: () => JobStatus.queued,
+      );
+
+  /// Sonuç henüz belli değil — ekran yoklamaya devam etmeli.
+  bool get isPending => this == JobStatus.queued || this == JobStatus.running;
+}
+
+/// Çalıştırma öncesi uyarılar (M6).
+///
+/// Sunucu İngilizce anahtar gönderiyor, Türkçe cümle burada kuruluyor —
+/// profil eksikleriyle aynı kalıp. *"Sorun varsa organizatör uyarılır ama
+/// çalıştırma engellenmez."*
+enum MatchingWarning {
+  noParticipants(
+    'no_participants',
+    'Kabul edilmiş katılımcı yok. Başvuruları onaylamadan eşleştirme yapılamaz.',
+  ),
+  noTables(
+    'no_tables',
+    'Salon düzeni kurulmamış. Masalar olmadan kimse oturtulamaz.',
+  ),
+  capacityBelowParticipants(
+    'capacity_below_participants',
+    'Salon kapasitesi katılımcı sayısından az. Bazı kişiler bazı turlarda '
+        'boşta kalacak.',
+  ),
+  incompleteProfiles(
+    'incomplete_profiles',
+    'Bazı katılımcıların profili eksik. Eksik profil zayıf eşleşme demek.',
+  ),
+  requestsStillOpen(
+    'requests_still_open',
+    'Görüşme talepleri hâlâ açık. Şimdi çalıştırırsan sonradan gelecek '
+        'talepler bu plana yansımaz.',
+  ),
+  unknown('', 'Beklenmeyen bir durum var.');
+
+  const MatchingWarning(this.key, this.message);
+
+  final String key;
+  final String message;
+
+  static MatchingWarning fromKey(String key) => MatchingWarning.values.firstWhere(
+        (item) => item.key == key,
+        // Sunucu ileride yeni bir uyarı eklerse arayüz çökmemeli.
+        orElse: () => MatchingWarning.unknown,
+      );
+}
+
+/// Çalıştırma öncesi kontrol listesi (M6).
+class MatchingCheck {
+  const MatchingCheck({
+    required this.acceptedCount,
+    required this.tableCount,
+    required this.seatingCapacity,
+    required this.requestCount,
+    required this.incompleteProfileCount,
+    required this.slotCount,
+    required this.requestsOpen,
+    required this.warnings,
+    required this.canRun,
+  });
+
+  factory MatchingCheck.fromJson(Map<String, dynamic> json) => MatchingCheck(
+        acceptedCount: json['accepted_count'] as int,
+        tableCount: json['table_count'] as int,
+        seatingCapacity: json['seating_capacity'] as int,
+        requestCount: json['request_count'] as int,
+        incompleteProfileCount: json['incomplete_profile_count'] as int,
+        slotCount: json['slot_count'] as int,
+        requestsOpen: json['requests_open'] as bool,
+        warnings: (json['warnings'] as List<dynamic>)
+            .map((item) => MatchingWarning.fromKey(item as String))
+            .toList(),
+        canRun: json['can_run'] as bool,
+      );
+
+  final int acceptedCount;
+  final int tableCount;
+  final int seatingCapacity;
+  final int requestCount;
+  final int incompleteProfileCount;
+  final int slotCount;
+  final bool requestsOpen;
+  final List<MatchingWarning> warnings;
+
+  /// Motor çalışabilir mi. Uyarılar engellemiyor; bu bayrak yalnızca hesabın
+  /// hiç anlamlı olmadığı durumu söylüyor.
+  final bool canRun;
+}
+
+/// Bir plan versiyonu ve hesabının durumu.
+class PlanSummary {
+  const PlanSummary({
+    required this.id,
+    required this.version,
+    required this.status,
+    required this.jobStatus,
+    required this.createdAt,
+    required this.seed,
+    required this.assignmentCount,
+    required this.participantCount,
+    this.jobError,
+    this.publishedAt,
+    this.totalMeetings,
+    this.minMeetingsPerPerson,
+    this.averageTableScore,
+    this.runtimeMs,
+  });
+
+  factory PlanSummary.fromJson(Map<String, dynamic> json) => PlanSummary(
+        id: json['id'] as int,
+        version: json['version'] as int,
+        status: json['status'] as String,
+        jobStatus: JobStatus.fromKey(json['job_status'] as String),
+        jobError: json['job_error'] as String?,
+        createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
+        publishedAt: json['published_at'] == null
+            ? null
+            : DateTime.parse(json['published_at'] as String).toLocal(),
+        seed: json['seed'] as int,
+        totalMeetings: json['total_meetings'] as int?,
+        minMeetingsPerPerson: json['min_meetings_per_person'] as int?,
+        averageTableScore: (json['average_table_score'] as num?)?.toDouble(),
+        runtimeMs: json['runtime_ms'] as int?,
+        assignmentCount: json['assignment_count'] as int,
+        participantCount: json['participant_count'] as int,
+      );
+
+  final int id;
+  final int version;
+
+  /// Planın kendi durumu: taslak / yayında / arşiv. Aşama 8'in konusu.
+  final String status;
+
+  final JobStatus jobStatus;
+  final String? jobError;
+  final DateTime createdAt;
+  final DateTime? publishedAt;
+  final int seed;
+
+  /// Hesap bitene kadar boş — plan satırı iş kuyruğa girer girmez oluşuyor.
+  final int? totalMeetings;
+  final int? minMeetingsPerPerson;
+  final double? averageTableScore;
+  final int? runtimeMs;
+
+  final int assignmentCount;
+  final int participantCount;
+
+  bool get isPending => jobStatus.isPending;
+  bool get hasResult => jobStatus == JobStatus.done;
+}
+
 // --- Başvuru (M3) ------------------------------------------------------------
 
 /// Başvurunun durumu.

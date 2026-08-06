@@ -10,6 +10,7 @@ from app.models.company import Company
 from app.models.enums import (
     AttendanceStatus,
     EventStatus,
+    JobStatus,
     LayoutMode,
     MeetingRequestStatus,
     PlanStatus,
@@ -38,6 +39,7 @@ __all__ = [
     "LayoutMode",
     "MatchReason",
     "MeetingRequest",
+    "JobStatus",
     "MeetingRequestStatus",
     "Plan",
     "PlanStatus",
