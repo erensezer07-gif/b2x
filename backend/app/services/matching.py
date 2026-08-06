@@ -69,6 +69,23 @@ class MatchingContext:
     def table_of(self, index: int) -> int:
         return self.table_ids[index]
 
+    def index_of_registration(self, registration_id: int) -> int | None:
+        """Kimlikten indekse — elle düzeltmede skoru yeniden hesaplamak için.
+
+        Kabul edilmiş listede olmayan bir başvuru `None` döner: plan
+        üretildikten sonra biri geri çekilmiş olabilir.
+        """
+        try:
+            return self.registration_ids.index(registration_id)
+        except ValueError:
+            return None
+
+    def index_of_table(self, table_id: int) -> int | None:
+        try:
+            return self.table_ids.index(table_id)
+        except ValueError:
+            return None
+
 
 def _city_key(city: str | None) -> str | None:
     """Şehri karşılaştırılabilir hale getirir.

@@ -23,7 +23,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models import Assignment, Event, JobStatus, Plan, PlanStatus
+from app.models import (
+    Assignment,
+    Event,
+    JobStatus,
+    MeetingRequest,
+    MeetingRequestStatus,
+    Plan,
+    PlanStatus,
+    Profile,
+    Registration,
+    RegistrationStatus,
+    User,
+)
 from app.services.matching import build_engine_input, build_rows
 from engine.runner import run_matching
 
@@ -133,3 +145,76 @@ async def seated_participant_count(session: AsyncSession, plan_id: int) -> int:
         )
     )
     return result.scalar_one()
+
+
+async def unmatched_names(session: AsyncSession, event_id: int, plan_id: int) -> list[str]:
+    """*"Hiç eşleşmemiş kişi var mı, varsa kimler"* (M7).
+
+    Kabul edilmiş ama planın hiçbir turunda masaya oturmamış kişiler. Özet
+    panelin en can alıcı ikinci bilgisi: organizatör bu isimleri görüp elle
+    yerleştirebilir.
+    """
+    seated = select(Assignment.registration_id).where(Assignment.plan_id == plan_id)
+    result = await session.execute(
+        select(Profile.full_name, Registration.id)
+        .join(User, User.id == Registration.user_id)
+        .join(Profile, Profile.user_id == User.id, isouter=True)
+        .where(
+            Registration.event_id == event_id,
+            Registration.status == RegistrationStatus.ACCEPTED,
+            Registration.id.not_in(seated),
+        )
+        .order_by(Registration.id)
+    )
+    return [name or f"#{registration_id}" for name, registration_id in result.all()]
+
+
+async def request_counts(session: AsyncSession, event_id: int, plan_id: int) -> tuple[int, int]:
+    """*"Karşılanan talep sayısı / toplam talep"* (M7).
+
+    Bir talep, iki taraf planın herhangi bir turunda aynı masaya oturduysa
+    karşılanmış sayılıyor. Talep sistemi Aşama 10'da açılıyor; şimdilik ikisi
+    de sıfır dönüyor.
+    """
+    total = await session.execute(
+        select(func.count())
+        .select_from(MeetingRequest)
+        .where(
+            MeetingRequest.event_id == event_id,
+            MeetingRequest.status == MeetingRequestStatus.ACTIVE,
+        )
+    )
+    total_count = total.scalar_one()
+    if total_count == 0:
+        return 0, 0
+
+    seats = await session.execute(
+        select(Assignment.slot_number, Assignment.table_id, Assignment.registration_id).where(
+            Assignment.plan_id == plan_id
+        )
+    )
+    together: set[tuple[int, int]] = set()
+    by_table: dict[tuple[int, int], list[int]] = {}
+    for slot, table, registration in seats.all():
+        by_table.setdefault((slot, table), []).append(registration)
+    for people in by_table.values():
+        ordered = sorted(people)
+        for position, first in enumerate(ordered):
+            for second in ordered[position + 1 :]:
+                together.add((first, second))
+
+    requests = await session.execute(
+        select(
+            MeetingRequest.requester_registration_id,
+            MeetingRequest.target_registration_id,
+        ).where(
+            MeetingRequest.event_id == event_id,
+            MeetingRequest.status == MeetingRequestStatus.ACTIVE,
+        )
+    )
+    satisfied = sum(
+        1
+        for requester, target in requests.all()
+        if (min(requester, target), max(requester, target)) in together
+    )
+    return satisfied, total_count

@@ -994,6 +994,8 @@ düşürürdü.
 pahalı bir hata — yanlış güne uçak bileti alınır. `formatDate` ay adını
 yazıyor ve etkinlik listesi de ona geçti.
 
+## Motor — kategori düzeyinde kısmi puan (9.3)
+
 ### Kategori düzeyinde kısmi puan — katsayı 0.30, doyum 1
 
 Aşama 6'da havuzun 72'de tıkandığını ölçmüştük. Sebep: etiket havuzu
@@ -1052,6 +1054,8 @@ hesaplanıyor (kategorili ve kategorisiz), farkı "kategori sayesinde kazanılan
 puan" olarak ayrı yazılıyor. Toplam korunuyor, arayüz de doğru cümleyi
 kurabiliyor: *"Sen X sunuyorsun, o X arıyor"* ile *"İkiniz de Y alanındasınız"*
 aynı şey değil (M8).
+
+## Aşama 7 — Motorun bağlanması
 
 ### Hesabın durumu plandan ayrı bir alan
 
@@ -1161,3 +1165,96 @@ Türkçesini üretiyor.
 
 Belirti tarayıcıda yakalandı; sebebi ayrıydı (8000 portunda Aşama 0'dan kalma
 konteyner çalışıyordu) ama İngilizce metnin sızması gerçek bir kusurdu.
+
+## Aşama 8 — Plan önizleme ve düzeltme (Tur 1: backend)
+
+### Takas doğrulaması sunucuda
+
+Kontroller şirket **kimliğini**, masa kapasitesini ve *diğer slotlardaki*
+eşleşmeleri gerektiriyor. İstemciye taşımak planın tamamını indirmek olurdu —
+bir tur için 4 masa isterken 8 turun hepsini çekmek. Bölüm 0 zaten kuralların
+sunucuda uygulanmasını istiyor; burada gerekçe ayrıca pratik.
+
+### Uyarı engel değil — tek istisna sabitleme
+
+M7: *"Organizatör uyarıya rağmen devam edebilir — ama ne yaptığını bilerek
+yapar."* Bu yüzden takas hiçbir kural kontrolünde reddedilmiyor; kontroller
+takastan **sonra** çalışıp uyarı listesi üretiyor.
+
+Reddedilen tek durum sabitlenmiş atama. Sabitlemenin anlamı zaten "buna
+dokunma"; onu da uyarıya çevirmek kavramı boşaltırdı. Ret `409` ile dönüyor,
+uyarılar `200` gövdesinde.
+
+### Kontroller yalnızca dokunulan masalara bakıyor
+
+Plan zaten kusurlu olabilir (organizatör başka bir takasta uyarıyı yok
+saymıştır). Bütün planı taramak, bu takasın yol açmadığı sorunları bu takasın
+uyarısı gibi gösterirdi. Uyarı listesi "az önce ne yaptın" sorusunu
+cevaplıyor.
+
+### Masa kalitesi mutlak, göreli değil
+
+zayıf < eşik · orta < 1.5×eşik · iyi ≥ 1.5×eşik.
+
+Göreli olsaydı (planın kendi ortalamasına göre) kötü bir planda da yeşil
+masalar çıkardı ve organizatör planı iyi sanırdı. Mutlak eşikle aynı renk her
+zaman aynı şeyi anlatıyor.
+
+Ölçek sağlıklı: tam karşılıklı bir ikili 1.00, tek etiket örtüşen 0.43, yalnız
+kategori örtüşen 0.30 alıyor — üç seviye de gerçek veriyle ulaşılabilir.
+
+### Tek kişilik masanın rengi "boş"
+
+Skor en zayıf ikili bağ (9.4); tek kişide bağ yok. 0.0 yazıp "zayıf" demek
+yanıltıcı olurdu — sorun masanın kalitesi değil, orada kimsenin olmaması.
+Ayrıca `lonely_table` uyarısı zaten bunu söylüyor.
+
+### Takasta sinerji modeli yeniden kuruluyor
+
+Takas daha önce hiç yan yana gelmemiş ikililer üretiyor; onların skoru
+`match_reasons` tablosunda yok. Satırlar tazelenmezse masa skoru yanlış çıkar
+ve Aşama 9'da katılımcıya olmayan bir gerekçe gösterilirdi.
+
+Model 200 kişi için ~10 ms — bütün ikili skorları saklamaktan (20 000 satır)
+çok daha ucuz. Yalnızca dokunulan masaların satırları siliniyor ve yeniden
+yazılıyor.
+
+Skoru bulunamayan ikili **0.0** sayılıyor. Sessizce yüksek varsaymak, bir hata
+durumunda kötü masayı iyi gösterirdi.
+
+### Uyarılar bağımsız bir gözle sınanıyor
+
+`engine/rules.py` içindeki `find_violations` aynı kuralları denetliyor ama
+metin üretiyor, arayüzün işleyeceği yapı değil. İkisi ayrı yazıldı; testler
+her takastan sonra planı motorun denetleyicisinden geçirip orada bulunan her
+ihlal türünün uçtan da uyarı olarak döndüğünü doğruluyor.
+
+Aynı koddan türeyen bir denetleyici bu işi göremezdi.
+
+### Yayınlamada önce arşiv, sonra yayın
+
+Koşullu benzersiz indeks (Aşama 1) bir etkinlikte tek yayın planına izin
+veriyor. Sıra ters olsaydı — önce yenisini yayınlayıp sonra eskisini arşive
+almak — aradaki an indeksi ihlal ederdi.
+
+Aynı planı iki kez yayınlamak zararsız: sorgu `Plan.id != plan.id` diyor, plan
+kendini arşive atmıyor.
+
+### Yayındaki plan kilitlenmiyor
+
+Spec 469 büyük değişiklikler için yeni versiyon öneriyor. Ama tek bir
+düzeltme için organizatörü yeniden çalıştırmaya zorlamak, motorun bütün planı
+değiştirmesi demek — minimum değişim modu Aşama 11'de gelecek. Şimdilik
+yayındaki plan da düzeltilebiliyor ve düzeltme katılımcıya anında yansıyor.
+
+### Hiç eşleşmemiş kişiler isimle dönüyor
+
+M7 *"varsa kimler"* diyor, sayı değil. Sayı organizatöre hiçbir şey vermez;
+isim listesi elle yerleştirmenin başlangıcı. Kabul edilmiş ama planın hiçbir
+turunda masaya oturmamış kişiler.
+
+### `_require_plan` yardımcısı
+
+Plan araması dört uçta daha tekrar edecekti. Başka bir etkinliğin planı da
+`404`'e düşüyor: kimlik tarayarak hangi planların var olduğu öğrenilememeli
+(Bölüm 7'nin `get_owned_event`'teki gerekçesiyle aynı).

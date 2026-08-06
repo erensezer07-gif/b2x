@@ -13,17 +13,34 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.api.deps import JobQueueDep, OwnedEvent, SessionDep
-from app.models import JobStatus, Plan
+from app.models import Assignment, JobStatus, Plan
 from app.schemas.plan import (
     MatchingCheckResponse,
+    PinRequest,
     PlanSummaryResponse,
     RunMatchingRequest,
+    SeatedPersonResponse,
+    SlotViewResponse,
+    SwapRequest,
+    SwapResponse,
+    SwapWarningResponse,
+    TableViewResponse,
 )
 from app.services.matching import build_matching_check
+from app.services.plan_editing import (
+    SwapRejected,
+    TableView,
+    apply_swap,
+    build_slot_view,
+    publish,
+    set_pinned,
+)
 from app.services.plan_runner import (
     assignment_count,
     create_queued_plan,
+    request_counts,
     seated_participant_count,
+    unmatched_names,
 )
 
 router = APIRouter(prefix="/events/{event_id}", tags=["esletirme"])
@@ -54,6 +71,7 @@ async def read_matching_check(event: OwnedEvent, session: SessionDep) -> Matchin
 
 
 async def _to_response(session: SessionDep, plan: Plan) -> PlanSummaryResponse:
+    satisfied, total = await request_counts(session, plan.event_id, plan.id)
     return PlanSummaryResponse(
         id=plan.id,
         version=plan.version,
@@ -69,6 +87,36 @@ async def _to_response(session: SessionDep, plan: Plan) -> PlanSummaryResponse:
         runtime_ms=plan.runtime_ms,
         assignment_count=await assignment_count(session, plan.id),
         participant_count=await seated_participant_count(session, plan.id),
+        unmatched=await unmatched_names(session, plan.event_id, plan.id),
+        satisfied_requests=satisfied,
+        total_requests=total,
+    )
+
+
+def _slot_response(slot_number: int, tables: list[TableView]) -> SlotViewResponse:
+    return SlotViewResponse(
+        slot_number=slot_number,
+        tables=[
+            TableViewResponse(
+                table_id=table.table_id,
+                number=table.number,
+                label=table.label,
+                capacity=table.capacity,
+                occupants=[
+                    SeatedPersonResponse(
+                        assignment_id=person.assignment_id,
+                        registration_id=person.registration_id,
+                        full_name=person.full_name,
+                        company=person.company,
+                        is_pinned=person.is_pinned,
+                    )
+                    for person in table.occupants
+                ],
+                quality=table.quality,
+                score=table.score,
+            )
+            for table in tables
+        ],
     )
 
 
@@ -133,6 +181,10 @@ async def list_plans(event: OwnedEvent, session: SessionDep) -> list[PlanSummary
 
 @router.get("/plans/{plan_id}", summary="Plan ve hesabın durumu")
 async def read_plan(plan_id: int, event: OwnedEvent, session: SessionDep) -> PlanSummaryResponse:
+    return await _to_response(session, await _require_plan(session, event, plan_id))
+
+
+async def _require_plan(session: SessionDep, event: OwnedEvent, plan_id: int) -> Plan:
     result = await session.execute(
         select(Plan)
         .where(Plan.id == plan_id, Plan.event_id == event.id)
@@ -142,4 +194,96 @@ async def read_plan(plan_id: int, event: OwnedEvent, session: SessionDep) -> Pla
     if plan is None:
         # Başka bir etkinliğin planı da buraya düşer (Bölüm 7).
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan bulunamadı.")
+    return plan
+
+
+# --- Önizleme ve elle düzeltme (M7) ------------------------------------------
+
+
+@router.get("/plans/{plan_id}/slots/{slot_number}", summary="Bir turun masaları")
+async def read_slot(
+    plan_id: int, slot_number: int, event: OwnedEvent, session: SessionDep
+) -> SlotViewResponse:
+    """*"Seçili slot için tüm masalar ve kimlerin oturduğu listelenir."* (M7)"""
+    plan = await _require_plan(session, event, plan_id)
+    if not 1 <= slot_number <= event.slot_count:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bu etkinlikte {event.slot_count} tur var.",
+        )
+    tables = await build_slot_view(session, event, plan, slot_number)
+    return _slot_response(slot_number, tables)
+
+
+@router.post("/plans/{plan_id}/swap", summary="İki kişiyi takas et")
+async def swap_people(
+    plan_id: int, payload: SwapRequest, event: OwnedEvent, session: SessionDep
+) -> SwapResponse:
+    """Takas ya da boş yere taşıma (M7).
+
+    Kural ihlalleri **uyarı** olarak dönüyor, takası engellemiyor:
+    *"Organizatör uyarıya rağmen devam edebilir — ama ne yaptığını bilerek
+    yapar."* Yalnızca sabitlenmiş atama reddediliyor.
+    """
+    plan = await _require_plan(session, event, plan_id)
+    try:
+        tables, warnings = await apply_swap(
+            session,
+            event,
+            plan,
+            slot_number=payload.slot_number,
+            assignment_id=payload.assignment_id,
+            target_assignment_id=payload.target_assignment_id,
+            target_table_id=payload.target_table_id,
+        )
+    except SwapRejected as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error.message) from error
+
+    return SwapResponse(
+        slot=_slot_response(payload.slot_number, tables),
+        warnings=[
+            SwapWarningResponse(
+                key=warning.key,
+                table_number=warning.table_number,
+                people=list(warning.people),
+                slot_number=warning.slot_number,
+            )
+            for warning in warnings
+        ],
+    )
+
+
+@router.patch(
+    "/plans/{plan_id}/assignments/{assignment_id}",
+    summary="Atamayı sabitle veya çöz",
+)
+async def pin_assignment(
+    plan_id: int,
+    assignment_id: int,
+    payload: PinRequest,
+    event: OwnedEvent,
+    session: SessionDep,
+) -> SlotViewResponse:
+    """*"Sabitlenen atama, motor tekrar çalıştırılsa bile değişmez."* (M7)"""
+    plan = await _require_plan(session, event, plan_id)
+    try:
+        await set_pinned(session, plan, assignment_id, payload.is_pinned)
+    except SwapRejected as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error.message) from error
+
+    assignment = await session.get(Assignment, assignment_id)
+    slot_number = assignment.slot_number if assignment else 1
+    tables = await build_slot_view(session, event, plan, slot_number)
+    return _slot_response(slot_number, tables)
+
+
+@router.post("/plans/{plan_id}/publish", summary="Planı yayınla")
+async def publish_plan(plan_id: int, event: OwnedEvent, session: SessionDep) -> PlanSummaryResponse:
+    """*"Plan durumu 'yayında' olur, katılımcılar kendi yerlerini görmeye
+    başlar. Varsa önceki yayındaki plan 'arşiv' durumuna geçer."* (M7)"""
+    plan = await _require_plan(session, event, plan_id)
+    try:
+        await publish(session, event, plan)
+    except SwapRejected as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error.message) from error
     return await _to_response(session, plan)
