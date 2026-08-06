@@ -379,4 +379,39 @@ class EventRepository {
       await _api.getObject('/events/$eventId/tablemates/$registrationId'),
     );
   }
+
+  // --- Görüşme talepleri (M9) ------------------------------------------------
+
+  /// Etkinliğin katılımcıları ve kalan talep hakkım.
+  ///
+  /// Liste tam profil taşımıyor: ad, unvan, şirket, sektör (Bölüm 7).
+  Future<ParticipantList> loadParticipants(
+    int eventId, {
+    String? search,
+    int? sectorId,
+  }) async {
+    return ParticipantList.fromJson(
+      await _api.getObject(
+        '/events/$eventId/participants',
+        query: {'q': ?search, 'sector_id': ?sectorId?.toString()},
+      ),
+    );
+  }
+
+  /// Talep gönderir; güncel listeyi döner.
+  Future<ParticipantList> sendRequest(int eventId, int targetRegistrationId) async {
+    return ParticipantList.fromJson(
+      await _api.post(
+        '/events/$eventId/requests',
+        body: {'target_registration_id': targetRegistrationId},
+      ),
+    );
+  }
+
+  /// Talebi geri çeker ve hakkı iade eder; güncel listeyi döner.
+  Future<ParticipantList> withdrawRequest(int eventId, int requestId) async {
+    return ParticipantList.fromJson(
+      await _api.delete('/events/$eventId/requests/$requestId'),
+    );
+  }
 }

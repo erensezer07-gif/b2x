@@ -12,6 +12,7 @@ import 'event_controller.dart';
 import 'event_list_screen.dart';
 import 'models.dart';
 import 'my_plan_screen.dart';
+import 'participants_screen.dart';
 import 'schedule.dart';
 
 /// Katılımcının gördüğü etkinlik detayı ve başvuru akışı (şartname M3).
@@ -149,6 +150,17 @@ class _PublicEventScreenState extends ConsumerState<PublicEventScreen> {
             ),
             icon: const Icon(Icons.event_seat_outlined),
             label: const Text('Oturma planım'),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // Görüşme talepleri (M9). Talepler kapandıysa ekran bunu söylüyor;
+          // asıl kapı sunucuda.
+          OutlinedButton.icon(
+            onPressed: () => context.goNamed(
+              ParticipantsScreen.routeName,
+              pathParameters: {'eventId': '${widget.eventId}'},
+            ),
+            icon: const Icon(Icons.handshake_outlined),
+            label: const Text('Kimlerle görüşmek istersin'),
           ),
         ],
 

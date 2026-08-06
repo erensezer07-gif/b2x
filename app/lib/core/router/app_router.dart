@@ -8,6 +8,7 @@ import '../../features/events/event_list_screen.dart';
 import '../../features/events/layout/layout_editor_screen.dart';
 import '../../features/events/matching_screen.dart';
 import '../../features/events/my_plan_screen.dart';
+import '../../features/events/participants_screen.dart';
 import '../../features/events/plan_screen.dart';
 import '../../features/events/public_event_screen.dart';
 import '../../features/events/registrations_screen.dart';
@@ -143,6 +144,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => TablemateScreen(
           eventId: int.parse(state.pathParameters['eventId']!),
           registrationId: int.parse(state.pathParameters['registrationId']!),
+        ),
+      ),
+      // Görüşme talepleri — katılımcı listesi (M9).
+      GoRoute(
+        path: ParticipantsScreen.routePath,
+        name: ParticipantsScreen.routeName,
+        builder: (context, state) => ParticipantsScreen(
+          eventId: int.parse(state.pathParameters['eventId']!),
         ),
       ),
       // Katılımcının gördüğü etkinlik detayı. Yolu `/etkinlikler` altında

@@ -50,6 +50,7 @@ Map<String, dynamic> planJson({
     'unmatched': unmatched,
     'satisfied_requests': 0,
     'total_requests': 0,
+    'unmet_requests': <Map<String, dynamic>>[],
   };
 }
 

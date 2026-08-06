@@ -516,6 +516,7 @@ void main() {
         'unmatched': unmatched,
         'satisfied_requests': requests > 0 ? 3 : 0,
         'total_requests': requests,
+        'unmet_requests': <Map<String, dynamic>>[],
       });
     }
 

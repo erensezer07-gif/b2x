@@ -293,7 +293,11 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
       children: [
-        PlanSummaryPanel(plan: plan),
+        PlanSummaryPanel(
+          plan: plan,
+          // Karşılanmayan bir talepten doğrudan takas ekranına (M9).
+          onOpenSlot: (slotNumber) => _selectSlot(slotNumber),
+        ),
         if (_error != null) ...[
           const SizedBox(height: AppSpacing.md),
           SwapErrorBanner(

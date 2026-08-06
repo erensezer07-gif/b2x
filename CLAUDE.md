@@ -130,7 +130,17 @@ Görünürlük canlı sunucuda arayüzsüz sınandı: yayınlanmamış planda ki
 
 Tarayıcıda doğrulandı: yayınlanmadan "Oturma planınız henüz hazırlanıyor" → yayınlandıktan sonra dört tur, saatler, masa numaraları ve isimler → tur detayında kroki (kendi masası vurgulu) → yön ayrımlı gerekçe cümleleri → tam profil → masa arkadaşı olmayanın profilinde "Bu kişi masa arkadaşın değil". İki dil pürüzü ve bir yeniden deneme davranışı orada yakalandı.
 
-**Sıradaki: Aşama 10 — Görüşme talepleri.** Katılımcı listesi, talep gönderme, hak sınırı, motora bonus olarak bağlanması.
+**Aşama 10 bitti — görüşme talepleri.**
+
+*Backend:* Katılımcı listesi (arama + sektör süzgeci), talep gönderme, geri çekme. Gelen talep ucu **yok** — M9'un "talep gönderildiği kişiye bildirilmez" kuralı ucun yokluğuyla uygulanıyor. Kapılar: hak sınırı, kapanış zamanı, kendine talep, kabul edilmemiş hedef. 366 test.
+
+*İstemci:* Katılımcı listesi ekranı, kalan hak, arama ve süzgeç, talep/geri çekme, M9'un garanti uyarısı. Organizatörün plan ekranına karşılanmayan talepler paneli. 149 test.
+
+Şartnameye eklendi (M9 + M7): organizatör plan ekranında **karşılanmayan** talepleri görüyor — karşılıklılar vurgulu ve takas ekranına bağlı, tek taraflılar kapalı listede "zorlanması önerilmez" notuyla. Karşılanmış talep gösterilmiyor: yapılacak bir şey yok.
+
+Talep bonusu (9.3) ilk kez gerçek veriyle çalıştı; `meeting_requests` Aşama 1'den beri boştu. Aşama 9'daki `mutual_request` gerekçesi de ilk kez tetikleniyor.
+
+**Sıradaki: Aşama 11 — Check-in.** QR üretimi, tarama ekranı, elle işaretleme, minimum değişim modunda yeniden çalıştırma.
 
 ### API uçları
 
@@ -170,6 +180,9 @@ POST  /events/{id}/plans/{pid}/publish
 
 GET /events/{id}/my-plan            GET /events/{id}/venue
 GET /events/{id}/tablemates/{rid}
+
+GET    /events/{id}/participants?q=&sector_id=
+POST   /events/{id}/requests        DELETE /events/{id}/requests/{rid}
 ```
 
 Çıkış ucu yok: jetonlar durumsuz, çıkış istemcide jetonu silmekle olur.
@@ -301,4 +314,12 @@ curl http://localhost:8000/health/ready   db ve redis'e erişiliyor mu
 **Türkçe cümlede sabit bağlaç kullanma.** Etiket adının kendisi "ve" içerebiliyor ("Veri analitiği ve raporlama"); `'X ve N alan daha'` çift bağlaç üretiyordu. Üç ve fazlasında virgül. Zamir de sayıya bağlı: "bunu / bunları".
 
 **İstemci hatası yeniden denenmiyor.** Riverpod 3 başarısız sağlayıcıları kendiliğinden tekrarlıyor; 4xx asla düzelmediği için hata ekranı saniyelerce gecikiyordu. `main.dart` içindeki `ProviderScope(retry: ...)` 4xx'i hiç denemiyor.
+
+**Gelen talep ucu yazma.** M9: *"Talep gönderildiği kişiye bildirilmez."* Kural bir süzgeçle değil ucun yokluğuyla uygulanıyor; `my_request_id` yalnızca bakanın kendi gönderdiğini taşıyor. Yeni bir alan eklerken karşı tarafın talebini sızdırmadığından emin ol.
+
+**Geri çekilen talebi silme.** `uq_meeting_requests_pair` duruma bakmadan ikili benzersizliğini zorluyor; satır silinip yenisi eklenemez. Durum `cancelled` olur, tekrar talep gelirse `active`'e döner — Aşama 6'daki başvuru kalıbının aynısı.
+
+**Talep hakkı yalnızca aktif talepleri sayıyor.** Geri çekmek hakkı iade ediyor: kıtlığın anlamı "aynı anda kaç kişiyi istiyorsun". Sayacı toplam gönderime çevirmek kullanıcıyı hatasıyla baş başa bırakır.
+
+**Talepler kapandıysa geri çekme de kapalı.** Açık bırakmak kilitlenmiş bir planı yeniden oynatırdı (M9'un kapanış gerekçesi).
 

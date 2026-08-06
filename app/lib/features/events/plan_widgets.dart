@@ -485,9 +485,12 @@ class _AddHere extends StatelessWidget {
 /// bir plan tek bir kişiyi ortada bırakmış olabilir. Bu yüzden en üstte ve
 /// vurgulu.
 class PlanSummaryPanel extends StatelessWidget {
-  const PlanSummaryPanel({super.key, required this.plan});
+  const PlanSummaryPanel({super.key, required this.plan, this.onOpenSlot});
 
   final PlanSummary plan;
+
+  /// Karşılanmayan bir talepten ilgili tura gitmek için (M9).
+  final void Function(int slotNumber)? onOpenSlot;
 
   @override
   Widget build(BuildContext context) {
@@ -523,6 +526,21 @@ class PlanSummaryPanel extends StatelessWidget {
                   ),
               ],
             ),
+            if (plan.unmetMutual.isNotEmpty) ...[
+              const Divider(height: AppSpacing.lg),
+              UnmetRequestsSection(
+                unmet: plan.unmetMutual,
+                oneWay: plan.unmetOneWay,
+                onOpenSlot: onOpenSlot,
+              ),
+            ] else if (plan.unmetOneWay.isNotEmpty) ...[
+              const Divider(height: AppSpacing.lg),
+              UnmetRequestsSection(
+                unmet: const [],
+                oneWay: plan.unmetOneWay,
+                onOpenSlot: onOpenSlot,
+              ),
+            ],
             if (plan.unmatched.isNotEmpty) ...[
               const Divider(height: AppSpacing.lg),
               Text(
@@ -589,6 +607,130 @@ class _Figure extends StatelessWidget {
               color: colors.onSurfaceVariant,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Karşılanmayan talepler (şartname M9, organizatör görünümü).
+///
+/// *"Karşılanmış bir talebin operasyonel karşılığı yoktur."* Bu yüzden yalnızca
+/// karşılanmayanlar geliyor ve iki grup ayrı duruyor:
+///
+/// * **Karşılıklı** — ikisi de birbirini istemiş, motor yine de aynı masaya
+///   koyamamış. M9 buna "neredeyse kesin eşleşme" diyor; kaçırıldıysa gerçek
+///   bir kusur. Her satırdan takas ekranına gidiliyor.
+/// * **Tek taraflı** — kapalı bir listede, bilgi olarak. Zorlanması
+///   **önerilmiyor**: karşı taraf için değerli olduğu belli değil ve zorlamak
+///   onun planını bozar.
+class UnmetRequestsSection extends StatelessWidget {
+  const UnmetRequestsSection({
+    super.key,
+    required this.unmet,
+    required this.oneWay,
+    required this.onOpenSlot,
+  });
+
+  final List<UnmetRequest> unmet;
+  final List<UnmetRequest> oneWay;
+  final void Function(int slotNumber)? onOpenSlot;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (unmet.isNotEmpty) ...[
+          Row(
+            children: [
+              Icon(Icons.warning_amber_outlined, color: colors.error),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Karşılanmayan ${unmet.length} karşılıklı talep',
+                  style: theme.textTheme.titleSmall?.copyWith(color: colors.error),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'İkisi de birbirini istemiş ama aynı masaya düşmemiş. '
+            'Elle düzeltilebilir.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (final item in unmet) _UnmetRow(item: item, onOpenSlot: onOpenSlot),
+        ],
+        if (oneWay.isNotEmpty) ...[
+          if (unmet.isNotEmpty) const SizedBox(height: AppSpacing.sm),
+          Theme(
+            // Açılır listenin kendi çizgileri panelin içinde fazla duruyor.
+            data: theme.copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: Text(
+                'Karşılanmayan ${oneWay.length} tek taraflı talep',
+                style: theme.textTheme.titleSmall,
+              ),
+              subtitle: Text(
+                'Zorlanması önerilmez: karşı taraf için değerli olduğu belli '
+                'değil.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              children: [
+                for (final item in oneWay)
+                  _UnmetRow(item: item, onOpenSlot: onOpenSlot),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _UnmetRow extends StatelessWidget {
+  const _UnmetRow({required this.item, required this.onOpenSlot});
+
+  final UnmetRequest item;
+  final void Function(int slotNumber)? onOpenSlot;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final slot = item.fixableSlot;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      child: Row(
+        children: [
+          Expanded(child: Text(item.pair, style: theme.textTheme.bodyMedium)),
+          if (slot != null && onOpenSlot != null)
+            TextButton(
+              onPressed: () => onOpenSlot!(slot),
+              child: Text('$slot. Tur'),
+            )
+          else
+            Text(
+              // İkisi hiçbir turda birlikte oturmuyor: takasla düzeltilecek
+              // bir yer yok, önce birinin masaya oturması gerekiyor.
+              'Düzeltilecek tur yok',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
         ],
       ),
     );

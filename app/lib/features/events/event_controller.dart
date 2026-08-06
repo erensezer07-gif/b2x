@@ -136,6 +136,39 @@ class TablemateQuery {
   int get hashCode => Object.hash(eventId, registrationId);
 }
 
+/// Etkinliğin katılımcıları ve kalan talep hakkım (M9).
+///
+/// Süzgeç argümanda: her süzgeç ayrı bir önbellek. Talep gönderildiğinde
+/// hepsi tazeleniyor (`RequestActions`), yoksa başka bir süzgeçte satır eski
+/// hâlinde kalırdı — `eventRegistrationsProvider` ile aynı tuzak.
+final participantsProvider =
+    FutureProvider.family<ParticipantList, ParticipantQuery>((ref, query) {
+  return ref.watch(eventRepositoryProvider).loadParticipants(
+        query.eventId,
+        search: query.search,
+        sectorId: query.sectorId,
+      );
+});
+
+/// Katılımcı listesinin sorgusu.
+class ParticipantQuery {
+  const ParticipantQuery(this.eventId, {this.search, this.sectorId});
+
+  final int eventId;
+  final String? search;
+  final int? sectorId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ParticipantQuery &&
+      other.eventId == eventId &&
+      other.search == search &&
+      other.sectorId == sectorId;
+
+  @override
+  int get hashCode => Object.hash(eventId, search, sectorId);
+}
+
 /// Tek bir plan versiyonu — önizleme ekranının özet paneli (M7).
 final planProvider =
     FutureProvider.family<PlanSummary, PlanQuery>((ref, query) {
@@ -507,4 +540,41 @@ class PlanEditActions {
 final planEditActionsProvider =
     Provider.family<PlanEditActions, PlanQuery>((ref, query) {
   return PlanEditActions(ref, query.eventId, query.planId);
+});
+
+/// Görüşme talebi işlemleri (M9).
+///
+/// Uçlar güncel listeyi geri döndürüyor; ekran onu doğrudan kullanıyor.
+/// Sağlayıcı yine de tazeleniyor: başka bir süzgeçle geri dönüldüğünde satır
+/// eski hâlinde kalmamalı.
+class RequestActions {
+  const RequestActions(this._ref, this.eventId);
+
+  final Ref _ref;
+  final int eventId;
+
+  Future<ParticipantList> send(int targetRegistrationId) async {
+    final list = await _ref
+        .read(eventRepositoryProvider)
+        .sendRequest(eventId, targetRegistrationId);
+    _invalidate();
+    return list;
+  }
+
+  Future<ParticipantList> withdraw(int requestId) async {
+    final list =
+        await _ref.read(eventRepositoryProvider).withdrawRequest(eventId, requestId);
+    _invalidate();
+    return list;
+  }
+
+  /// Bütün süzgeçleri tazeliyor.
+  ///
+  /// Talep gönderilen kişi başka bir süzgeçte de görünüyor olabilir; yalnızca
+  /// açık olanı tazelemek onu eski hâlinde bırakırdı.
+  void _invalidate() => _ref.invalidate(participantsProvider);
+}
+
+final requestActionsProvider = Provider.family<RequestActions, int>((ref, eventId) {
+  return RequestActions(ref, eventId);
 });

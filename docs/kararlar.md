@@ -1574,3 +1574,43 @@ talep **iki** talep — ikisi de isteğini almış oluyor.
 2-7'de yazılıp hiç tetiklenmemişti. Test karşılıklı talep kurup planı
 çalıştırıyor ve ikisinin aynı masaya düştüğünü doğrudan atamalardan
 doğruluyor.
+
+## Aşama 10 — Görüşme talepleri (Tur 2: istemci)
+
+### "Kimlerle görüşmek istersin" — liste bir seçim ekranı
+
+Başlık bilerek soru: ekranın işi rehber sunmak değil, katılımcıyı **seçmeye**
+zorlamak. Kalan hak en üstte ve sayıyla yazılıyor; kıtlık görünmezse kıtlık
+değil.
+
+Hak dolduğunda düğmeler kapanıyor ama **geri çekme açık kalıyor** — cümle de
+bunu söylüyor: *"Birini geri çekersen yenisini gönderebilirsin."* Çıkmaz sokak
+bırakmamak.
+
+### Talep sonrası liste uçtan geliyor
+
+Uç güncel listeyi yanıtın içinde döndürüyor; ekran onu doğrudan gösteriyor.
+Aşama 8'deki takas kararının aynısı: sağlayıcıyı beklemek satırı bir an eski
+hâline döndürürdü.
+
+Sağlayıcı yine de **bütün süzgeçler için** tazeleniyor. Talep gönderilen kişi
+başka bir süzgeçte de görünüyor olabilir; yalnızca açık olanı tazelemek onu
+eski hâlinde bırakırdı — `eventRegistrationsProvider`'daki tuzağın aynısı.
+
+### Aramada bekleme var
+
+Her tuşta istek atmak sunucuyu da listeyi de yoruyor. 350 ms yazma sonrası
+tek istek. Süzgeç değişince taze liste sıfırlanıyor: eski süzgecin sonucu
+yeni süzgecin başlığı altında durmamalı.
+
+### Karşılanmayan talepler özet panelin içinde
+
+Ayrı bir ekran değil: organizatör zaten plan ekranında ve düzeltme aracı
+(takas) orada. Satırdaki "3. Tur" düğmesi doğrudan o turu açıyor.
+
+Karşılıklılar kusur rengiyle ve açık listede; tek taraflılar `ExpansionTile`
+içinde kapalı, altında *"zorlanması önerilmez"* uyarısıyla. İkisini aynı
+listede göstermek organizatörü yanlış hamleye davet ederdi.
+
+İki tarafın da oturmadığı bir ikili için "Düzeltilecek tur yok" yazıyor —
+takasla çözülecek bir şey yok, önce birinin masaya oturması gerekiyor.

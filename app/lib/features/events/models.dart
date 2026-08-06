@@ -473,6 +473,7 @@ class PlanSummary {
     required this.unmatched,
     required this.satisfiedRequests,
     required this.totalRequests,
+    required this.unmetRequests,
     this.jobError,
     this.publishedAt,
     this.totalMeetings,
@@ -503,6 +504,9 @@ class PlanSummary {
             .toList(),
         satisfiedRequests: json['satisfied_requests'] as int,
         totalRequests: json['total_requests'] as int,
+        unmetRequests: (json['unmet_requests'] as List<dynamic>)
+            .map((item) => UnmetRequest.fromJson(item as Map<String, dynamic>))
+            .toList(),
       );
 
   final int id;
@@ -532,6 +536,17 @@ class PlanSummary {
   /// *"Karşılanan talep sayısı / toplam talep."* (M7)
   final int satisfiedRequests;
   final int totalRequests;
+
+  /// *"Organizatör plan ekranında karşılanmayan talepleri görür."* (M9)
+  /// Karşılanmışlar gelmiyor: yapılacak bir şey kalmamış.
+  final List<UnmetRequest> unmetRequests;
+
+  /// Kaçırılan karşılıklı talepler — düzeltilmesi gerekenler.
+  List<UnmetRequest> get unmetMutual =>
+      unmetRequests.where((item) => item.mutual).toList();
+
+  List<UnmetRequest> get unmetOneWay =>
+      unmetRequests.where((item) => !item.mutual).toList();
 
   bool get isPending => jobStatus.isPending;
   bool get hasResult => jobStatus == JobStatus.done;
@@ -1285,4 +1300,128 @@ class TablemateProfile {
   final Sector? sector;
 
   String get displayName => fullName ?? 'Adı girilmemiş';
+}
+
+// --- Görüşme talepleri (M9) ---------------------------------------------------
+
+/// Katılımcı listesindeki bir satır.
+///
+/// M9: *"Listede ad, unvan, şirket, sektör görünür."* Tam profil burada yok —
+/// o yalnızca aynı masaya düşen kişiler için (Bölüm 7).
+class ParticipantRow {
+  const ParticipantRow({
+    required this.registrationId,
+    this.fullName,
+    this.title,
+    this.company,
+    this.sector,
+    this.photoUrl,
+    this.myRequestId,
+  });
+
+  factory ParticipantRow.fromJson(Map<String, dynamic> json) => ParticipantRow(
+        registrationId: json['registration_id'] as int,
+        fullName: json['full_name'] as String?,
+        title: json['title'] as String?,
+        company: json['company'] as String?,
+        sector: json['sector'] as String?,
+        photoUrl: json['photo_url'] as String?,
+        myRequestId: json['my_request_id'] as int?,
+      );
+
+  final int registrationId;
+  final String? fullName;
+  final String? title;
+  final String? company;
+  final String? sector;
+  final String? photoUrl;
+
+  /// Doluysa **ben** bu kişiye talep göndermişim; geri çekmek için kimlik.
+  ///
+  /// Karşı tarafın bana talep gönderip göndermediği burada yok ve sunucuda da
+  /// yok — M9: *"talep gönderildiği kişiye bildirilmez."*
+  final int? myRequestId;
+
+  bool get requested => myRequestId != null;
+
+  String get displayName => fullName ?? 'Adı girilmemiş';
+}
+
+/// Katılımcı listesi ve talep hakkım.
+class ParticipantList {
+  const ParticipantList({
+    required this.participants,
+    required this.requestQuota,
+    required this.requestsUsed,
+    required this.requestsRemaining,
+    required this.requestsOpen,
+  });
+
+  factory ParticipantList.fromJson(Map<String, dynamic> json) => ParticipantList(
+        participants: (json['participants'] as List<dynamic>)
+            .map((item) => ParticipantRow.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        requestQuota: json['request_quota'] as int,
+        requestsUsed: json['requests_used'] as int,
+        requestsRemaining: json['requests_remaining'] as int,
+        requestsOpen: json['requests_open'] as bool,
+      );
+
+  final List<ParticipantRow> participants;
+  final int requestQuota;
+  final int requestsUsed;
+  final int requestsRemaining;
+
+  /// *"Talepler bir zamanda kapanır."* Kapalıysa düğmeler kapalı; asıl kapı
+  /// sunucuda.
+  final bool requestsOpen;
+
+  bool get exhausted => requestsRemaining <= 0;
+
+  /// Kalan hakkın Türkçe karşılığı.
+  String get quotaSentence {
+    if (requestQuota == 0) return 'Bu etkinlikte görüşme talebi gönderilemiyor.';
+    if (requestsRemaining == 0) {
+      return 'Talep hakkın doldu. Birini geri çekersen yenisini gönderebilirsin.';
+    }
+    return '$requestQuota talep hakkından $requestsRemaining tanesi kaldı.';
+  }
+}
+
+/// Karşılanmayan bir talep — **organizatör** görünümü (M9).
+class UnmetRequest {
+  const UnmetRequest({
+    required this.requesterRegistrationId,
+    required this.targetRegistrationId,
+    required this.requesterName,
+    required this.targetName,
+    required this.mutual,
+    this.fixableSlot,
+  });
+
+  factory UnmetRequest.fromJson(Map<String, dynamic> json) => UnmetRequest(
+        requesterRegistrationId: json['requester_registration_id'] as int,
+        targetRegistrationId: json['target_registration_id'] as int,
+        requesterName: json['requester_name'] as String,
+        targetName: json['target_name'] as String,
+        mutual: json['mutual'] as bool,
+        fixableSlot: json['fixable_slot'] as int?,
+      );
+
+  final int requesterRegistrationId;
+  final int targetRegistrationId;
+  final String requesterName;
+  final String targetName;
+
+  /// *"Neredeyse kesin eşleşme."* Karşılanmadıysa gerçek bir kusur.
+  final bool mutual;
+
+  /// İki tarafın da oturduğu ama farklı masalara düştüğü ilk tur — takasla
+  /// düzeltilebilecek yer. Biri hiç oturmuyorsa boş.
+  final int? fixableSlot;
+
+  /// Karşılıklıda çift yönlü ok, tek taraflıda tek yönlü.
+  String get pair => mutual
+      ? '$requesterName ↔ $targetName'
+      : '$requesterName → $targetName';
 }
