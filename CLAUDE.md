@@ -269,6 +269,8 @@ curl http://localhost:8000/health/ready   db ve redis'e erişiliyor mu
 
 **Türkçe cümlede sayıya ek getirme.** Ek sayının **okunuşuna** göre değişiyor: 1'in ama 2'nin, 3'ün, 4'te, 6'da, 9'un. Arayüzde "Masa 2'ın" ve "Masa 4'da" çıktı. Cümle ek gerektirmeyecek şekilde kurulur — *"Masa 3 — tek kişi kaldı: ..."*. `plan_test.dart` içinde bir test bunu tutuyor.
 
+**Masa kalitesi motorun amaç fonksiyonundan farklı.** Motor 9.4'ü optimize ediyor (masanın en zayıf ikilisi); rozet `table_score()` ile **en yalnız kişinin en iyi bağına** bakıyor. İkisi bilerek ayrı: en zayıf ikili masa boyuyla birlikte anlamını yitiriyor, ölçümde altı sandalyeli masaların hiçbiri "iyi" alamıyordu. İki kişilik masada iki ölçüt aynı sonucu veriyor. Ayrıntı ve ölçüm `docs/kararlar.md`'de.
+
 **Tek kişilik masaya "Boş" yazma.** Sunucu ona kalite vermiyor (skor en zayıf ikili bağ, tek kişide bağ yok) ve `TableQuality.empty` dönüyor. İstemci bunu doğrudan etikete çevirince masada biri otururken rozet "Boş" diyordu. `QualityBadge` doluluğa da bakıyor.
 
 **Takas uçları görünümü geri döndürüyor, ekran onu kullanmalı.** Sağlayıcının yeniden yüklemesini beklemek listeyi bir an eski hâline döndürür ve seçimi kaybettirir. `plan_screen.dart` yanıttaki görünümü tutuyor, sağlayıcıyı ayrıca tazeliyor.

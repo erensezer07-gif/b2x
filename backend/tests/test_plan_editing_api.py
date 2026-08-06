@@ -30,8 +30,10 @@ from app.services.plan_editing import (
     QUALITY_DROPPED,
     REPEAT_PAIR,
     SAME_COMPANY,
+    SeatedPerson,
     TableQuality,
     quality_of,
+    table_score,
 )
 from engine.rules import (
     CAPACITY,
@@ -138,7 +140,63 @@ def assert_second_eye_agrees(violations: set[str], result: dict) -> None:
         assert expected in reported, f"{rule} ihlali var ama {expected} uyarısı dönmedi."
 
 
-# --- Kalite seviyeleri ----------------------------------------------------------
+# --- Masa skoru ve kalite seviyeleri -----------------------------------------
+
+
+def person(registration_id: int) -> SeatedPerson:
+    return SeatedPerson(
+        assignment_id=registration_id,
+        registration_id=registration_id,
+        full_name=f"Kişi {registration_id}",
+        company=None,
+        is_pinned=False,
+    )
+
+
+def links(**pairs: float) -> dict[tuple[int, int], float]:
+    """`links(ab=0.9)` → {(1, 2): 0.9}. Harfler kimliğe çevriliyor: a=1, b=2..."""
+    return {(ord(name[0]) - 96, ord(name[1]) - 96): score for name, score in pairs.items()}
+
+
+def test_table_score_on_a_pair_is_the_pair_itself() -> None:
+    """İki kişilik masada eski ölçütle birebir aynı olmalı."""
+    assert table_score([person(1), person(2)], links(ab=0.62)) == 0.62
+
+
+def test_table_score_asks_whether_anyone_is_left_out() -> None:
+    """*"En yalnız kişinin en iyi bağı."* (M7)
+
+    Üç kişilik masa: a–b çok iyi, ikisi de c ile zayıf. En zayıf ikili 0.10
+    ama asıl soru c'nin durumu — onun da en iyi bağı 0.10, yani masa zayıf.
+    """
+    table = [person(1), person(2), person(3)]
+    assert table_score(table, links(ab=0.90, ac=0.10, bc=0.10)) == 0.10
+
+
+def test_table_score_does_not_collapse_with_table_size() -> None:
+    """Herkes birisiyle iyi anlaşıyorsa masa iyi — herkesle değil.
+
+    Altı kişilik masada üç iyi ikili var, kalan on iki bağ zayıf. En zayıf
+    ikiliye bakan ölçüt 0.05 derdi ve masa "zayıf" görünürdü; kimse ortada
+    kalmadığı hâlde. Ölçümde altı sandalyeli masaların hiçbiri "iyi"
+    alamıyordu, sebebi buydu.
+    """
+    table = [person(index) for index in range(1, 7)]
+    scores = dict.fromkeys(
+        ((first, second) for first in range(1, 7) for second in range(first + 1, 7)),
+        0.05,
+    )
+    scores[(1, 2)] = 0.80
+    scores[(3, 4)] = 0.75
+    scores[(5, 6)] = 0.70
+
+    assert table_score(table, scores) == 0.70
+    assert quality_of(table_score(table, scores), 6, 0.35) is TableQuality.GOOD
+
+
+def test_a_missing_pair_counts_as_the_worst() -> None:
+    """Takas sonrası satır yazılmamış ikili sessizce yüksek sayılmamalı."""
+    assert table_score([person(1), person(2)], {}) == 0.0
 
 
 def test_quality_levels_are_absolute() -> None:

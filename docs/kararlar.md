@@ -1328,3 +1328,59 @@ görecek, varsa önceki plan arşive geçecek, düzeltme yine mümkün.
 
 Alt çubuk planın durumunu da söylüyor: *"Plan taslak. Katılımcılar henüz
 hiçbir şey göremiyor."* / *"Katılımcılar bu planı görüyor."*
+
+### Kalite rozeti "en zayıf ikili"ye değil "en yalnız kişi"ye bakıyor
+
+Tarayıcı doğrulamasından sonra fark edildi: 3 ve üzeri kişilik masalar
+neredeyse hep "zayıf" çıkıyordu. Ölçüldü — yapay veri değil, yapısal:
+
+| masa boyu | zayıf | orta | iyi |
+|---|---|---|---|
+| 2 kişi | %0 | %0 | %100 |
+| 3 kişi | %19 | %63 | %17 |
+| 4 kişi | %52 | %42 | %6 |
+| 5 kişi | %67 | %33 | %0 |
+| 6 kişi | %36 | %64 | %0 |
+
+*(200 katılımcı, 50 masa, 8 tur, tohum 42.)*
+
+Altı sandalyeli bir masa "iyi" rozetini **hiç** alamıyordu. Sebep: skor
+masanın en zayıf ikilisi (9.4) ama rozet sınırı sabit. İki kişilik masada tek
+ikili var, altı kişilikte on beş — on beş çekilişin en düşüğü kaçınılmaz
+olarak küçük. Rozet tam da en çok gerektiği yerde (gerçek etkinlikler 4-6
+sandalye kullanıyor) tek renge düşüyor ve organizatör hangi masayı
+düzelteceğini göremiyor.
+
+**Yeni ölçüt: en yalnız kişinin en iyi bağı.** Masadaki her kişi için o
+masadaki en iyi bağ bulunuyor, rozet bunların en düşüğüne bakıyor. Ölçüldü:
+
+| masa boyu | eski (iyi) | yeni (iyi) |
+|---|---|---|
+| 2 kişi | %100 | %100 |
+| 3 kişi | %17 | %48 |
+| 4 kişi | %6 | %44 |
+| 5 kişi | %0 | %27 |
+| 6 kişi | %0 | %71 |
+
+Altı kişilikte hâlâ ayırt ediyor: %7 zayıf, %21 orta, %71 iyi. İki kişilik
+masada eski ölçütle **birebir aynı** (tek ikili var, kişinin en iyi bağı o).
+
+9.4'e aykırı değil, gerekçesine daha yakın: *"o dördüncü kişi yarım saat
+dışlanmış hisseder."* Kişinin masadan memnun ayrılması için herkesle tutması
+gerekmiyor, birisiyle tutması yetiyor. Bugünkü ölçüt "herkes herkesle uyumlu
+olsun" diyordu ki on beş ikilide imkânsız.
+
+**Motorun amaç fonksiyonu değişmedi.** 9.4 hâlâ en zayıf ikiliyi optimize
+ediyor — daha sıkı bir hedef, zararı yok. Değişen yalnızca göstergenin
+okunuşu. Şartname M7'ye yazıldı.
+
+Elenen alternatifler:
+
+* **Eşiği masa boyuna göre ölçeklemek.** Rozet motorun amacıyla hizalı
+  kalırdı ama her masa boyu için bir katsayı gerekiyordu — popülasyona bağlı,
+  başka bir etkinlikte yeniden kalibrasyon isteyen bir tablo.
+* **Ortalama ikili skoru.** 9.4'ün uyardığı durumu gizlerdi: üçü uyumlu,
+  dördüncü alakasız bir masa yüksek görünürdü.
+* **Eşiğin altındaki ikili oranı.** Masa boyundan bağımsız ama tek bir kişi
+  dışlandığında (o kişinin bütün bağları kötü) oran hâlâ küçük kalıyor —
+  tam da yakalanması gereken durum.

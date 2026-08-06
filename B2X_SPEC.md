@@ -433,6 +433,22 @@ Her masa için gösterilenler:
 - Doluluk (kaç kişi / kaç sandalye)
 - Masa kalite göstergesi — sayı değil, üç seviye: iyi / orta / zayıf
 
+Kalite göstergesi **en yalnız kişinin en iyi bağına** bakar: masadaki her kişi
+için o masadaki en iyi bağı bulunur, göstergenin dayandığı sayı bunların en
+düşüğüdür. Sınırlar mutlaktır ve kalite eşiğine bağlıdır — zayıf < eşik, orta
+< 1.5×eşik, iyi ≥ 1.5×eşik.
+
+Bu, motorun amaç fonksiyonundan (9.4, masanın en zayıf ikilisi) **bilerek
+farklıdır.** Motor her ikiliyi yukarı itmeye devam eder; gösterge ise
+organizatörün sorduğu soruyu cevaplar: "bu masada kimse ortada kalıyor mu?"
+En zayıf ikiliye bakan bir gösterge masa boyuyla birlikte anlamını yitiriyor —
+iki kişilik masada tek ikili varken altı kişilikte on beş ikili var ve on beş
+çekilişin en düşüğü kaçınılmaz olarak küçük. Ölçümde altı sandalyeli masaların
+hiçbiri "iyi" alamıyordu. Bir kişinin masadan memnun ayrılması için herkesle
+tutması gerekmiyor, birisiyle tutması yetiyor.
+
+Motorun amaç fonksiyonu **değişmez**; bu yalnızca göstergenin okunuşudur.
+
 #### Özet paneli
 
 Planın genel sağlığı tek bakışta görünmeli:

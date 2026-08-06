@@ -181,23 +181,40 @@ async def _pair_scores(session: AsyncSession, plan_id: int) -> dict[tuple[int, i
     return {(a, b): score for a, b, score in result.all()}
 
 
-def _table_score(occupants: list[SeatedPerson], scores: dict[tuple[int, int], float]) -> float:
-    """Masa skoru = en zayıf ikili bağ (9.4).
+def table_score(occupants: list[SeatedPerson], scores: dict[tuple[int, int], float]) -> float:
+    """Göstergenin dayandığı sayı: **en yalnız kişinin en iyi bağı** (M7).
 
-    Toplam değil: dört kişilik bir masada üçü uyumlu, dördüncü alakasızsa
-    toplama bakan sistem masayı yüksek görür; o dördüncü kişi yarım saat
-    dışlanmış hisseder.
+    Her kişi için o masadaki en iyi bağı bulunuyor, sonuç bunların en düşüğü.
+    Cevapladığı soru: *"bu masada kimse ortada kalıyor mu?"*
+
+    **Motorun amaç fonksiyonu değil.** 9.4 masayı en zayıf ikilisiyle ölçüyor
+    ve motor onu optimize etmeye devam ediyor. Ama *gösterge* olarak en zayıf
+    ikili masa boyuyla birlikte anlamını yitiriyor: iki kişilik masada tek
+    ikili var, altı kişilikte on beş — on beş çekilişin en düşüğü kaçınılmaz
+    olarak küçük. Ölçümde altı sandalyeli masaların **hiçbiri** "iyi"
+    alamıyordu; rozet tek renge düşünce organizatör hangi masayı düzelteceğini
+    göremiyordu (ayrıntı `docs/kararlar.md`).
+
+    9.4'ün gerekçesine aykırı değil, ona daha yakın: *"o dördüncü kişi yarım
+    saat dışlanmış hisseder."* Kişinin masadan memnun ayrılması için herkesle
+    tutması gerekmiyor, **birisiyle** tutması yetiyor.
+
+    İki kişilik masada tek ikilinin skoruna eşit — eski ölçütle birebir aynı.
     """
     if len(occupants) < 2:
         return 0.0
-    pairs = []
+
+    best_link = dict.fromkeys((person.registration_id for person in occupants), 0.0)
     for position, first in enumerate(occupants):
         for second in occupants[position + 1 :]:
             key = _pair_key(first.registration_id, second.registration_id)
             # Takas sonrası satır yazılmamış bir ikili kalırsa en kötüyü
             # varsayıyoruz; sessizce yüksek göstermek yanıltıcı olurdu.
-            pairs.append(scores.get(key, 0.0))
-    return min(pairs)
+            score = scores.get(key, 0.0)
+            best_link[first.registration_id] = max(best_link[first.registration_id], score)
+            best_link[second.registration_id] = max(best_link[second.registration_id], score)
+
+    return min(best_link.values())
 
 
 def _pair_key(first: int, second: int) -> tuple[int, int]:
@@ -227,7 +244,7 @@ async def build_slot_view(
     views = []
     for table in tables:
         occupants = seated[table.id]
-        score = _table_score(occupants, scores)
+        score = table_score(occupants, scores)
         views.append(
             TableView(
                 table_id=table.id,
@@ -471,7 +488,7 @@ async def _check_after_swap(
                         )
                     )
 
-        score = _table_score(occupants, scores)
+        score = table_score(occupants, scores)
         if len(occupants) >= 2 and score < threshold:
             warnings.append(SwapWarning(QUALITY_DROPPED, table_number=table.number, people=names))
 
