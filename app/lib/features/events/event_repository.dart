@@ -205,4 +205,69 @@ class EventRepository {
       await _api.post('/events/$eventId/open-registration'),
     );
   }
+
+  // --- Keşif ve başvuru (M3) -------------------------------------------------
+
+  /// *"Yaklaşan etkinliklerin listesi."*
+  ///
+  /// Kendi düzenlediklerin de burada görünür — rol etkinliğe göre belirleniyor
+  /// (Bölüm 7). Kartın `isOpen` alanı başvurulup başvurulamayacağını söyler.
+  Future<List<DiscoverEvent>> discover() async {
+    final results = await _api.getList('/events/discover');
+    return results
+        .map((item) => DiscoverEvent.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Katılımcının gördüğü etkinlik detayı.
+  ///
+  /// Organizatörün ucu ayrı (`load`); bu uç organizatör alanlarını taşımaz.
+  Future<PublicEvent> loadPublic(int eventId) async {
+    return PublicEvent.fromJson(await _api.getObject('/events/$eventId/public'));
+  }
+
+  /// Etkinliğe başvurur.
+  ///
+  /// Profil eksikse sunucu 422 ile eksik alanların listesini döner;
+  /// `ApiException.message` bunu Türkçe cümleye çevirmiyor — ekran
+  /// `missingForApplication` üzerinden kendi metnini kuruyor.
+  Future<PublicEvent> apply(int eventId) async {
+    return PublicEvent.fromJson(await _api.post('/events/$eventId/registration'));
+  }
+
+  Future<PublicEvent> withdraw(int eventId) async {
+    return PublicEvent.fromJson(await _api.delete('/events/$eventId/registration'));
+  }
+
+  // --- Organizatör: başvuru yönetimi -----------------------------------------
+
+  Future<RegistrationSummary> loadRegistrations(
+    int eventId, {
+    RegistrationStatus? status,
+  }) async {
+    return RegistrationSummary.fromJson(
+      await _api.getObject(
+        '/events/$eventId/registrations',
+        query: {'status': ?status?.key},
+      ),
+    );
+  }
+
+  Future<RegistrationSummary> approveRegistration({
+    required int eventId,
+    required int registrationId,
+  }) async {
+    return RegistrationSummary.fromJson(
+      await _api.post('/events/$eventId/registrations/$registrationId/approve'),
+    );
+  }
+
+  Future<RegistrationSummary> rejectRegistration({
+    required int eventId,
+    required int registrationId,
+  }) async {
+    return RegistrationSummary.fromJson(
+      await _api.post('/events/$eventId/registrations/$registrationId/reject'),
+    );
+  }
 }

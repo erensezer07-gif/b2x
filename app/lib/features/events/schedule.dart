@@ -101,3 +101,26 @@ String formatTime(DateTime moment) {
   final minute = moment.minute.toString().padLeft(2, '0');
   return '$hour:$minute';
 }
+
+/// Tarihi `12 Kasım 2026` biçiminde yazar.
+///
+/// Ay adı sayıdan okunur: `12.11.2026` ile `11.12.2026` bir bakışta
+/// karıştırılıyor, etkinlik kartında bu pahalı bir hata.
+String formatDate(DateTime moment) {
+  return '${moment.day} ${_months[moment.month - 1]} ${moment.year}';
+}
+
+const _months = [
+  'Ocak',
+  'Şubat',
+  'Mart',
+  'Nisan',
+  'Mayıs',
+  'Haziran',
+  'Temmuz',
+  'Ağustos',
+  'Eylül',
+  'Ekim',
+  'Kasım',
+  'Aralık',
+];

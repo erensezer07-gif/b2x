@@ -818,3 +818,189 @@ doğrudan gönderiliyor.
 Saydamlığı sıfırlanmış bir `CircularProgressIndicator` görünmese de tik atmaya
 devam ediyor: hem boşuna kare üretiyor hem de `pumpAndSettle` hiç
 durulmadığı için panel testleri yazılamıyordu.
+
+---
+
+## Aşama 6 — Etkinlik keşfi ve başvuru
+
+### Katılımcının gördüğü etkinlik ayrı bir şema
+
+`GET /events/{id}` organizatörün ucu ve `OwnedEvent` bağımlılığından geçiyor;
+başkasına 404 dönüyor. Katılımcı için `GET /events/{id}/public` açıldı.
+
+Aynı `EventResponse`'u paylaşmadılar: o şema `auto_approve_registrations`,
+`request_quota` ve `capacity_summary` taşıyor — organizatörün ayarları,
+katılımcıya sızmamalı (Bölüm 7). Alan gizlemek yerine ayrı şema yazmak, ileride
+organizatör yanıtına eklenen bir alanın sessizce dışarı çıkmasını da engelliyor.
+
+**Taslak etkinlik dışarıya hiç görünmüyor**, 404 dönüyor. Organizatör henüz
+yayınlamadıysa varlığı bile bilinmemeli.
+
+### Kontenjanı yalnızca kabul edilenler doldurur
+
+Bekleyen başvurular sayılmıyor. Sayılsaydı elle onay yapan organizatör
+kontenjandan fazla başvuru toplayıp aralarından seçemezdi — elle onayın tüm
+anlamı bu.
+
+Sonucu şu: bekleyen sayısı kontenjanı aşabiliyor, dolayısıyla **onayda ayrı bir
+kapı** gerekiyor. Başvuru anındaki kontrol tek başına yetmez.
+
+### Kapıların sırası bilinçli
+
+`check_can_apply` önce kullanıcıya özel engelleri, sonra etkinliğe özel
+olanları bakıyor. Profili eksik birine "kontenjan dolu" demek yanıltıcı olurdu:
+profilini tamamlayınca yine başvuramayacak, ama sebebi değişmiş sanacak.
+
+Profil eksikliği **422** ve eksik listesiyle dönüyor, diğerleri **409** ve düz
+mesajla. Ayrım kasıtlı: eksik profil kullanıcının düzeltebileceği bir şey,
+arayüz onu forma yönlendiriyor. Eksikler İngilizce anahtar olarak gidiyor,
+Türkçe cümleyi arayüz kuruyor — Aşama 3'teki kalıp.
+
+### Geri çekme satırı silmiyor
+
+Durum `cancelled` oluyor, kayıt duruyor. Silmek `uq_registrations_event_user`
+ile birlikte sessiz bir yeniden başvuru yolu açardı; ayrıca Aşama 11'de
+"kim ne zaman vazgeçti" bilgisi kaybolurdu.
+
+Yeniden başvuruda aynı satır kullanılıyor. Katılımcıya ve organizatöre iptal
+edilmiş başvuru gösterilmiyor: kullanıcı için "başvurmadı", organizatör için
+listede yok.
+
+**Kabul edilmiş başvuru da geri çekilebiliyor.** Katılamayacağını anlayan
+kişinin yeri boşalmalı, yoksa kontenjan gereksiz yere dolu kalır.
+
+### Keşif listesi kapalı etkinlikleri de gösteriyor
+
+Kontenjanı dolmuş veya son tarihi geçmiş etkinlik listeden düşmüyor; kartta
+`is_open` yanlış geliyor ve arayüz nedenini yazıyor. Sessizce kaybolmak
+kullanıcıyı şaşırtırdı — "dün buradaydı" diye arar.
+
+Listeden düşenler yalnızca taslaklar ve başlamış etkinlikler.
+
+### Sayımlar tek sorguda
+
+`_counts_subquery()` etkinlik başına kabul ve bekleyen sayısını `FILTER` ile
+topluyor. Keşif listesi yüzlerce etkinlik döndürebilir; her biri için ayrı
+sayım N+1 olurdu.
+
+### Etiket havuzu 72'ye çıkarıldı — ve orada duruyor
+
+Havuz 48'den 72'ye genişledi (üç yeni kategori: dış ticaret, enerji ve
+sürdürülebilirlik, tasarım ve mühendislik). Sayı keyfi değil, ölçüldü.
+
+İki kişinin ortak etiket bulma olasılığı kabaca `seçim² ÷ havuz`. Kişi başı
+asgari seçim 3 (M2) sabit olduğu için havuzun tavanı var. 200 katılımcı /
+8 tur / 50 masa, aynı tohum:
+
+| Havuz | Eşiği geçen ikili | Ortalama masa skoru |
+|---|---|---|
+| 48 | %4.6 | 0.353 |
+| 60 | %3.4 | 0.315 |
+| **72** | **%2.7** | **0.337** |
+| 84 | %2.2 | 0.095 |
+| 96 | %1.7 | 0.063 |
+
+84'te uçurum var: masaların dörtte üçünde en zayıf bağ sıfıra düşüyor, yani
+masaya birbirine hiç uymayan insanlar oturuyor.
+
+**Kategori sayısı bu tabloyu değiştirmiyor.** 150 etiketi 6 kategoriye de
+dağıtsan 15 kategoriye de sonuç aynı (0.062 / 0.065) — motor etiket kimliğine
+bakıyor, kategoriye bakmıyor. Kategoriler bugün yalnızca arayüz düzenleme
+aracı.
+
+Daha büyük havuz için iki yol ölçüldü:
+
+* **Asgari seçimi yükseltmek** işe yarıyor (100 etiket + 5 seçim = 0.455,
+  bugünden iyi) ama M2 değişikliği gerektiriyor ve kullanıcıyı zorluyor. Küçük
+  bir firma gerçekten beş şey sunmayabilir; zorlanınca alakasız etiket seçer ve
+  veriyi kirletir.
+* **Kategori düzeyinde kısmi puan** (9.3 değişikliği) tercih edilen yol:
+  kullanıcıdan fazlasını istemez, yakın eş anlamlı etiket sorununu da çözer
+  ("Backend geliştirme" sunan ile "Web yazılımı" arayan bugün sıfır puan
+  alıyor). MVP'ye girmedi.
+
+### Etiket listesinde silme yok, yalnızca ekleme
+
+`profile_tags` etiket **kimliğine** bakıyor. Eklemek ve adını düzeltmek bedava;
+silmek o etiketi seçmiş profilleri etkiler. `0003` bu yüzden `0002`'deki hiçbir
+kayda dokunmuyor.
+
+Bunun listeye yansıyan kuralı: şüphedeyken **geniş yaz**. İnce bölmek
+(bir etiketi üçe ayırmak) ancak kategori kısmi puanı geldiğinde güvenli olur —
+o zamana kadar bölmek, birbirini bulması gereken alıcıyla satıcıyı ayırır.
+
+### Kategoriler sektöre göre değil işleve göre
+
+Tekstilci de gıdacı da "ambalaj" arar. İşlevsel kategoriler havuzu küçük
+tutuyor; sektörel olsaydı her sektör kendi setini isterdi ve 72 tavanı çoktan
+aşılırdı. Sektör bilgisi zaten profilde ayrı bir alan ve skorda ayrı bir
+bileşen.
+
+### Keşif ucu etkinlik ucundan önce kaydediliyor
+
+`/events/{event_id}` daha önce gelseydi `/events/discover` ona eşleşir,
+"discover" bir kimlik sanılıp 422 dönerdi. `main.py` içindeki sıra bu yüzden
+önemli.
+
+### Keşfet ayrı bir alt sekme değil, Etkinlikler'in bir yaprağı
+
+Alt çubukta "Katılımcı" ve "Organizatör" ayrımı yapmak, olmayan bir rol
+kavramı uydururdu. Bölüm 7 açık: *"Rol kullanıcıya değil, etkinliğe göre
+belirlenir."* Aynı sekmenin iki yaprağı — **Keşfet** ve **Düzenlediklerim** —
+bunu doğru okuyor. `home_shell.dart` Aşama 3'ten beri bunu öngörüyordu.
+
+Kayan "Yeni etkinlik" düğmesi yalnızca Düzenlediklerim yaprağında görünüyor:
+Keşfet'teki etkinlikler başkasının, oraya oluşturma düğmesi koymak kafa
+karıştırırdı.
+
+### Katılımcı detayı `/kesfet/:id` yolunda, `/etkinlikler/:id` altında değil
+
+Aynı etkinliğin iki ekranı var ve ikisi farklı şey gösteriyor:
+`/etkinlikler/:id` organizatörün sihirbazı, `/kesfet/:id` herkesin gördüğü
+yüz. Alt yol yapmak "detayın bir parçası" izlenimi verirdi; ayrı yol ikisinin
+farklı ekranlar olduğunu söylüyor.
+
+### Eksik profil hatası ekranın kendi state'inde
+
+Sunucu 422 ile eksik alanların **İngilizce anahtarlarını** gönderiyor;
+`ApiException.missingForApplication` onu taşıyor, Türkçe cümleyi ekran
+`ProfileRequirement` üzerinden kuruyor. Aynı çeviri profil ekranında zaten
+vardı — iki yerde iki farklı metin olmasın.
+
+Hata paylaşılan duruma yazılmıyor: yönlendirme onu görüp kullanıcıyı başka
+sayfaya atardı (Aşama 3'te öğrenildi).
+
+### `RegistrationActions`, `EventActions`'tan ayrı
+
+İkisi farklı ekranlara hizmet ediyor: `EventActions` organizatörün sihirbazına,
+`RegistrationActions` katılımcı detayına ve onay ekranına. Tek sınıfta
+toplamak, her ekranın ilgilenmediği sağlayıcıları da tazelemesine yol açardı.
+
+**Onay sonrası bütün süzgeçler tazeleniyor.** Süzgeç sağlayıcının argümanında
+olduğu için her süzgeç ayrı bir önbellek; onaylanan başvuru "bekleyen"
+listesinden düşüp "kabul" listesine girmeli. Yalnızca açık olanı tazelemek
+diğerlerini bayat bırakırdı.
+
+### Kapalı etkinliğin sebebi kartta yazıyor
+
+`DiscoverEvent.closedReason` kontenjan mı doldu, son tarih mi geçti ayırt
+ediyor. Başvurusu olan kullanıcıya gösterilmiyor: rozet zaten "Kabul edildi"
+diyor, üstüne "kontenjan doldu" yazmak kişiyi kendi yerinden şüpheye
+düşürürdü.
+
+### Tarih ay adıyla yazılıyor
+
+`12.11.2026` ile `11.12.2026` bir bakışta karışıyor. Etkinlik kartında bu
+pahalı bir hata — yanlış güne uçak bileti alınır. `formatDate` ay adını
+yazıyor ve etkinlik listesi de ona geçti.
+
+### FastAPI'nin İngilizce varsayılanları eleniyor
+
+Kendi yazdığımız her hata mesajı Türkçe. FastAPI tanımadığı bir yola istek
+gelince `detail` alanına HTTP durumunun İngilizce adını koyuyor ve arayüz onu
+olduğu gibi gösteriyordu: Türkçe bir ekranda "Not Found" yazan kırmızı kutu.
+`api_exception.dart` artık bu listeye düşen mesajı yok sayıp durum koduna göre
+Türkçesini üretiyor.
+
+Belirti tarayıcıda yakalandı; sebebi ayrıydı (8000 portunda Aşama 0'dan kalma
+konteyner çalışıyordu) ama İngilizce metnin sızması gerçek bir kusurdu.

@@ -103,6 +103,12 @@ Konteynerdeki `api` servisi kodu imajın içinden çalıştırır, canlı yenide
 docker compose up -d db redis
 ```
 
+> **Sondaki `db redis` önemli.** Düz `docker compose up -d` yazarsan `api` konteyneri de kalkar ve `API_PORT`'u kaplar. O zaman iki şey olur: makinedeki `uvicorn` portu alamaz, ve tarayıcı istekleri imajın içindeki **eski koda** gider. Belirtisi, var olduğunu bildiğin bir uca `Not Found` almandır. Kontrol: `http://localhost:8000/docs` uzun bir uç listesi göstermeli; iki satır gösteriyorsa konteyner yanıt veriyordur.
+>
+> Yanlışlıkla açtıysan: `docker compose stop api worker`
+>
+> İmajı tazelemek istersen (teslim öncesi): `docker compose build api worker`
+
 Sanal ortam (bir kez):
 
 ```
@@ -213,14 +219,23 @@ Docker Desktop kullanılmıyorsa Docker, WSL2 dağıtımının içinde çalış�
 
 ```powershell
 $name = "B2X - WSL oturumunu acik tut"
+# Oturum herhangi bir sebeple düşerse döngü yeniden açar. Bu şart:
+# temiz çıkış, zamanlanmış görevin "yeniden dene" kuralı için hata sayılmaz.
+$cmd = 'while ($true) { wsl.exe -d Ubuntu-22.04 -u root -- sleep infinity; Start-Sleep -Seconds 5 }'
 $action = New-ScheduledTaskAction -Execute "powershell.exe" `
-  -Argument '-NoProfile -WindowStyle Hidden -Command "wsl.exe -d Ubuntu-22.04 -u root -- sleep infinity"'
+  -Argument "-NoProfile -WindowStyle Hidden -Command `"$cmd`""
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
   -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
   -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings
 Start-ScheduledTask -TaskName $name
+```
+
+Çalıştığı şuradan görülür — `Running` yazmalı, `Ready` değil:
+
+```powershell
+Get-ScheduledTask -TaskName "B2X - WSL oturumunu acik tut" | Select-Object State
 ```
 
 Dağıtım adı farklıysa (`wsl --list` ile görülür) komut ona göre değiştirilir. Kaldırmak için:

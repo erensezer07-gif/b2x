@@ -181,37 +181,41 @@ class _NoRecoveryWarning extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppSpacing.sm),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.warning_amber_outlined, color: colors.onSurfaceVariant),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  'Şifreni unutursan kurtarma seçeneği bulunmuyor. '
-                  'Bu sürümde şifre sıfırlama e-postası gönderilmiyor.',
-                  style: theme.textTheme.bodyMedium,
+    // `Container` + `BoxDecoration` değil `Material`: içindeki
+    // `CheckboxListTile` arka planını ve dokunma dalgasını en yakın
+    // `Material`'a çiziyor. Araya renkli bir kutu girdiğinde dalga onun
+    // altında kalıp görünmez oluyordu — Flutter bunu her karede uyarıyordu.
+    return Material(
+      color: colors.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(AppSpacing.sm),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warning_amber_outlined, color: colors.onSurfaceVariant),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Şifreni unutursan kurtarma seçeneği bulunmuyor. '
+                    'Bu sürümde şifre sıfırlama e-postası gönderilmiyor.',
+                    style: theme.textTheme.bodyMedium,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          CheckboxListTile(
-            value: acknowledged,
-            onChanged: onChanged == null ? null : (value) => onChanged!(value ?? false),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: const Text('Anladım, şifremi güvenli bir yerde saklayacağım'),
-          ),
-        ],
+              ],
+            ),
+            CheckboxListTile(
+              value: acknowledged,
+              onChanged: onChanged == null ? null : (value) => onChanged!(value ?? false),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: const Text('Anladım, şifremi güvenli bir yerde saklayacağım'),
+            ),
+          ],
+        ),
       ),
     );
   }

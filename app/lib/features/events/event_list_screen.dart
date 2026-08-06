@@ -5,51 +5,72 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/state_views.dart';
+import 'discover_tab.dart';
 import 'event_controller.dart';
 import 'models.dart';
+import 'registrations_screen.dart';
 import 'schedule.dart';
 import 'wizard/event_wizard_screen.dart';
 
-/// Organizatörün etkinlik listesi (şartname M4).
+/// Etkinlikler sekmesi — iki yaprak (şartname M3, M4).
 ///
-/// Şu an yalnızca kullanıcının **kendi oluşturduğu** etkinlikler görünüyor.
-/// Başvurulabilecek etkinliklerin keşfi Aşama 6'nın konusu ve aynı sekmeye
-/// eklenecek.
-class EventListScreen extends ConsumerWidget {
+/// **Keşfet** başvurulabilecek etkinlikler, **Düzenlediklerim** kullanıcının
+/// kendi oluşturdukları.
+///
+/// Ayrı bir alt sekme açılmadı: Bölüm 7 *"rol kullanıcıya değil, etkinliğe göre
+/// belirlenir"* diyor. Alt çubukta "Katılımcı" ve "Organizatör" ayrımı yapmak
+/// olmayan bir rol kavramı uydururdu; aynı sekmenin iki yaprağı doğru okuma.
+///
+/// Kayan "Yeni etkinlik" düğmesi yalnızca Düzenlediklerim yaprağında: Keşfet'te
+/// listelenen etkinlikler başkasının, oraya oluşturma düğmesi koymak kafa
+/// karıştırırdı.
+class EventListScreen extends ConsumerStatefulWidget {
   const EventListScreen({super.key});
 
   static const routeName = 'events';
   static const routePath = '/etkinlikler';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final events = ref.watch(myEventsProvider);
+  ConsumerState<EventListScreen> createState() => _EventListScreenState();
+}
+
+class _EventListScreenState extends ConsumerState<EventListScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 2, vsync: this)
+    ..addListener(() => setState(() {}));
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onOwnEvents = _tabs.index == 1;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Etkinlikler')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _createDraft(context, ref),
-        icon: const Icon(Icons.add),
-        label: const Text('Yeni etkinlik'),
+      appBar: AppBar(
+        title: const Text('Etkinlikler'),
+        bottom: TabBar(
+          controller: _tabs,
+          tabs: const [
+            Tab(text: 'Keşfet'),
+            Tab(text: 'Düzenlediklerim'),
+          ],
+        ),
       ),
-      body: switch (events) {
-        AsyncLoading() => const LoadingView(message: 'Etkinliklerin yükleniyor'),
-        AsyncError(:final error) => ErrorView(
-            message: error is ApiException
-                ? error.message
-                : 'Etkinlikler yüklenemedi.',
-            onRetry: () => ref.invalidate(myEventsProvider),
-          ),
-        AsyncData(:final value) when value.isEmpty => const EmptyView(
-            icon: Icons.event_outlined,
-            message: 'Henüz etkinlik oluşturmadın.\n'
-                'Sağ alttaki düğmeyle başlayabilirsin.',
-          ),
-        AsyncData(:final value) => RefreshIndicator(
-            onRefresh: () async => ref.invalidate(myEventsProvider),
-            child: _EventList(events: value),
-          ),
-      },
+      floatingActionButton: onOwnEvents
+          ? FloatingActionButton.extended(
+              onPressed: () => _createDraft(context, ref),
+              icon: const Icon(Icons.add),
+              label: const Text('Yeni etkinlik'),
+            )
+          : null,
+      body: TabBarView(
+        controller: _tabs,
+        children: const [DiscoverTab(), _MyEventsTab()],
+      ),
     );
   }
 
@@ -75,6 +96,33 @@ class EventListScreen extends ConsumerWidget {
     } on ApiException catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.message)));
     }
+  }
+}
+
+/// Düzenlediklerim yaprağı — organizatörün kendi etkinlikleri (M4).
+class _MyEventsTab extends ConsumerWidget {
+  const _MyEventsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final events = ref.watch(myEventsProvider);
+
+    return switch (events) {
+      AsyncLoading() => const LoadingView(message: 'Etkinliklerin yükleniyor'),
+      AsyncError(:final error) => ErrorView(
+          message: error is ApiException ? error.message : 'Etkinlikler yüklenemedi.',
+          onRetry: () => ref.invalidate(myEventsProvider),
+        ),
+      AsyncData(:final value) when value.isEmpty => const EmptyView(
+          icon: Icons.event_outlined,
+          message: 'Henüz etkinlik oluşturmadın.\n'
+              'Sağ alttaki düğmeyle başlayabilirsin.',
+        ),
+      AsyncData(:final value) => RefreshIndicator(
+          onRefresh: () async => ref.invalidate(myEventsProvider),
+          child: _EventList(events: value),
+        ),
+    };
   }
 }
 
@@ -124,7 +172,18 @@ class _EventCard extends StatelessWidget {
             ],
           ),
         ),
-        trailing: const Icon(Icons.chevron_right),
+        // Başvurular ayrı bir yol: kart sihirbaza götürüyor, bu düğme onay
+        // ekranına. Kayıtlar açılmadan başvuru olamaz, o yüzden taslakta yok.
+        trailing: event.status == EventStatus.draft
+            ? const Icon(Icons.chevron_right)
+            : IconButton(
+                icon: const Icon(Icons.how_to_reg_outlined),
+                tooltip: 'Başvurular',
+                onPressed: () => context.goNamed(
+                  RegistrationsScreen.routeName,
+                  pathParameters: {'eventId': '${event.id}'},
+                ),
+              ),
         onTap: () => context.goNamed(
           EventWizardScreen.routeName,
           pathParameters: {'eventId': '${event.id}'},
@@ -134,12 +193,10 @@ class _EventCard extends StatelessWidget {
   }
 
   String _describe(EventSummary event) {
-    final date = '${event.startsAt.day}.${event.startsAt.month}.${event.startsAt.year}';
-    final time = formatTime(event.startsAt);
     final place = event.venueName;
 
     return [
-      '$date · $time',
+      '${formatDate(event.startsAt)} · ${formatTime(event.startsAt)}',
       if (place != null && place.isNotEmpty) place,
       '${event.slotCount} tur · ${event.capacity} kişi',
     ].join(' · ');

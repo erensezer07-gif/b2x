@@ -1,6 +1,7 @@
-/// Etkinlik ve salon düzeni modelleri (şartname M4, M5).
+/// Etkinlik, salon düzeni ve başvuru modelleri (şartname M3, M4, M5).
 library;
 
+import '../profile/models.dart';
 import 'schedule.dart';
 
 /// Etkinlik durumu — yalnızca **başvuru akışını** yönetir (Bölüm 6).
@@ -326,4 +327,286 @@ class EventLayout {
   /// Kullanılmamış en küçük numara — yeni masaya önerilir (M5).
   int get nextTableNumber =>
       tables.fold(0, (highest, table) => table.number > highest ? table.number : highest) + 1;
+}
+
+// --- Başvuru (M3) ------------------------------------------------------------
+
+/// Başvurunun durumu.
+///
+/// *"Başvuru durumları kullanıcıya net gösterilir: başvurmadı / beklemede /
+/// kabul edildi / reddedildi."* "Başvurmadı" bir durum değil, başvurunun
+/// yokluğu — sunucu geri çekilmiş başvuruyu da yok sayıp `null` döndürüyor.
+enum RegistrationStatus {
+  pending('pending', 'Beklemede'),
+  accepted('accepted', 'Kabul edildi'),
+  rejected('rejected', 'Reddedildi'),
+  cancelled('cancelled', 'Geri çekildi');
+
+  const RegistrationStatus(this.key, this.label);
+
+  final String key;
+  final String label;
+
+  static RegistrationStatus fromKey(String key) => RegistrationStatus.values.firstWhere(
+        (item) => item.key == key,
+        orElse: () => RegistrationStatus.pending,
+      );
+}
+
+/// Oturumdaki kullanıcının bir etkinlikteki başvurusu.
+class MyRegistration {
+  const MyRegistration({
+    required this.id,
+    required this.status,
+    required this.appliedAt,
+  });
+
+  factory MyRegistration.fromJson(Map<String, dynamic> json) => MyRegistration(
+        id: json['id'] as int,
+        status: RegistrationStatus.fromKey(json['status'] as String),
+        appliedAt: DateTime.parse(json['applied_at'] as String).toLocal(),
+      );
+
+  final int id;
+  final RegistrationStatus status;
+  final DateTime appliedAt;
+}
+
+/// Keşif listesindeki kart (M3).
+///
+/// *"Her kart: ad, tarih, yer, kalan kontenjan, başvuru durumu."*
+class DiscoverEvent {
+  const DiscoverEvent({
+    required this.id,
+    required this.name,
+    required this.startsAt,
+    required this.slotCount,
+    required this.capacity,
+    required this.remainingCapacity,
+    required this.isOpen,
+    this.coverUrl,
+    this.venueName,
+    this.registrationDeadline,
+    this.myRegistration,
+  });
+
+  factory DiscoverEvent.fromJson(Map<String, dynamic> json) => DiscoverEvent(
+        id: json['id'] as int,
+        name: json['name'] as String,
+        coverUrl: json['cover_url'] as String?,
+        startsAt: DateTime.parse(json['starts_at'] as String).toLocal(),
+        venueName: json['venue_name'] as String?,
+        slotCount: json['slot_count'] as int,
+        capacity: json['capacity'] as int,
+        remainingCapacity: json['remaining_capacity'] as int,
+        registrationDeadline: json['registration_deadline'] == null
+            ? null
+            : DateTime.parse(json['registration_deadline'] as String).toLocal(),
+        isOpen: json['is_open'] as bool,
+        myRegistration: json['my_registration'] == null
+            ? null
+            : MyRegistration.fromJson(json['my_registration'] as Map<String, dynamic>),
+      );
+
+  final int id;
+  final String name;
+  final String? coverUrl;
+  final DateTime startsAt;
+  final String? venueName;
+  final int slotCount;
+
+  final int capacity;
+  final int remainingCapacity;
+  final DateTime? registrationDeadline;
+
+  /// Başvuru şu anda mümkün mü — kontenjan, son tarih ve etkinlik durumu
+  /// birlikte. Arayüz düğmeyi buna bakarak kapatıyor; asıl kapı sunucuda.
+  final bool isOpen;
+
+  final MyRegistration? myRegistration;
+
+  bool get isFull => remainingCapacity == 0;
+
+  /// Başvurulamıyorsa sebebi — kart üstünde yazılıyor.
+  ///
+  /// Kapalı bir etkinlik listeden düşmüyor; kullanıcı neden başvuramadığını
+  /// görmeli, "dün buradaydı" diye aramamalı.
+  String? get closedReason {
+    if (isOpen || myRegistration != null) return null;
+    if (isFull) return 'Kontenjan doldu';
+    final deadline = registrationDeadline;
+    if (deadline != null && DateTime.now().isAfter(deadline)) {
+      return 'Son başvuru tarihi geçti';
+    }
+    return 'Başvurular kapalı';
+  }
+}
+
+/// Katılımcının gördüğü etkinlik detayı (M3).
+///
+/// Organizatörün gördüğü `EventDetail`'den az alan taşıyor: otomatik onay,
+/// talep kotası ve kapasite özeti buraya girmiyor (Bölüm 7).
+class PublicEvent {
+  const PublicEvent({
+    required this.id,
+    required this.name,
+    required this.startsAt,
+    required this.slotDurationMinutes,
+    required this.breakDurationMinutes,
+    required this.slotCount,
+    required this.schedule,
+    required this.endsAt,
+    required this.totalMinutes,
+    required this.capacity,
+    required this.remainingCapacity,
+    required this.acceptedCount,
+    required this.isOpen,
+    this.description,
+    this.coverUrl,
+    this.venueName,
+    this.address,
+    this.registrationDeadline,
+    this.myRegistration,
+  });
+
+  factory PublicEvent.fromJson(Map<String, dynamic> json) => PublicEvent(
+        id: json['id'] as int,
+        name: json['name'] as String,
+        description: json['description'] as String?,
+        coverUrl: json['cover_url'] as String?,
+        startsAt: DateTime.parse(json['starts_at'] as String).toLocal(),
+        venueName: json['venue_name'] as String?,
+        address: json['address'] as String?,
+        slotDurationMinutes: json['slot_duration_minutes'] as int,
+        breakDurationMinutes: json['break_duration_minutes'] as int,
+        slotCount: json['slot_count'] as int,
+        schedule: (json['schedule'] as List<dynamic>)
+            .map((item) => SlotTiming.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        endsAt: DateTime.parse(json['ends_at'] as String).toLocal(),
+        totalMinutes: json['total_minutes'] as int,
+        capacity: json['capacity'] as int,
+        remainingCapacity: json['remaining_capacity'] as int,
+        acceptedCount: json['accepted_count'] as int,
+        registrationDeadline: json['registration_deadline'] == null
+            ? null
+            : DateTime.parse(json['registration_deadline'] as String).toLocal(),
+        isOpen: json['is_open'] as bool,
+        myRegistration: json['my_registration'] == null
+            ? null
+            : MyRegistration.fromJson(json['my_registration'] as Map<String, dynamic>),
+      );
+
+  final int id;
+  final String name;
+  final String? description;
+  final String? coverUrl;
+  final DateTime startsAt;
+  final String? venueName;
+  final String? address;
+
+  final int slotDurationMinutes;
+  final int breakDurationMinutes;
+  final int slotCount;
+
+  /// Sunucunun hesapladığı program — *"slot saatleri hesaplanmış halde"* (M3).
+  final List<SlotTiming> schedule;
+  final DateTime endsAt;
+  final int totalMinutes;
+
+  final int capacity;
+  final int remainingCapacity;
+
+  /// *"Kaç kişi katılıyor"* — kabul edilen başvuru sayısı.
+  final int acceptedCount;
+
+  final DateTime? registrationDeadline;
+  final bool isOpen;
+  final MyRegistration? myRegistration;
+}
+
+/// Başvuranın özeti — organizatörün onay ekranı için.
+class Applicant {
+  const Applicant({this.fullName, this.title, this.photoUrl, this.company, this.sector});
+
+  factory Applicant.fromJson(Map<String, dynamic> json) => Applicant(
+        fullName: json['full_name'] as String?,
+        title: json['title'] as String?,
+        photoUrl: json['photo_url'] as String?,
+        company: json['company'] == null
+            ? null
+            : Company.fromJson(json['company'] as Map<String, dynamic>),
+        sector: json['sector'] == null
+            ? null
+            : Sector.fromJson(json['sector'] as Map<String, dynamic>),
+      );
+
+  final String? fullName;
+  final String? title;
+  final String? photoUrl;
+  final Company? company;
+  final Sector? sector;
+
+  String get displayName => (fullName?.trim().isNotEmpty ?? false) ? fullName! : 'Adı girilmemiş';
+
+  /// Unvan ve şirket tek satırda; ikisi de yoksa boş.
+  String get subtitle =>
+      [title, company?.name].where((part) => part != null && part.isNotEmpty).join(' · ');
+}
+
+/// Organizatörün başvuru listesindeki bir satır.
+class EventRegistration {
+  const EventRegistration({
+    required this.id,
+    required this.status,
+    required this.appliedAt,
+    required this.applicant,
+  });
+
+  factory EventRegistration.fromJson(Map<String, dynamic> json) => EventRegistration(
+        id: json['id'] as int,
+        status: RegistrationStatus.fromKey(json['status'] as String),
+        appliedAt: DateTime.parse(json['applied_at'] as String).toLocal(),
+        applicant: Applicant.fromJson(json['applicant'] as Map<String, dynamic>),
+      );
+
+  final int id;
+  final RegistrationStatus status;
+  final DateTime appliedAt;
+  final Applicant applicant;
+}
+
+/// Başvuru listesi ve sayılar.
+///
+/// Sayılar listeyle birlikte geliyor: organizatör süzgeci değiştirdiğinde
+/// "kaç bekleyen kaldı" bilgisi kaybolmasın.
+class RegistrationSummary {
+  const RegistrationSummary({
+    required this.registrations,
+    required this.pendingCount,
+    required this.acceptedCount,
+    required this.rejectedCount,
+    required this.capacity,
+    required this.remainingCapacity,
+  });
+
+  factory RegistrationSummary.fromJson(Map<String, dynamic> json) => RegistrationSummary(
+        registrations: (json['registrations'] as List<dynamic>)
+            .map((item) => EventRegistration.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        pendingCount: json['pending_count'] as int,
+        acceptedCount: json['accepted_count'] as int,
+        rejectedCount: json['rejected_count'] as int,
+        capacity: json['capacity'] as int,
+        remainingCapacity: json['remaining_capacity'] as int,
+      );
+
+  final List<EventRegistration> registrations;
+  final int pendingCount;
+  final int acceptedCount;
+  final int rejectedCount;
+  final int capacity;
+  final int remainingCapacity;
+
+  bool get isFull => remainingCapacity == 0;
 }

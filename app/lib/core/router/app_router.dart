@@ -6,6 +6,8 @@ import '../../features/auth/login_screen.dart';
 import '../../features/auth/register_screen.dart';
 import '../../features/events/event_list_screen.dart';
 import '../../features/events/layout/layout_editor_screen.dart';
+import '../../features/events/public_event_screen.dart';
+import '../../features/events/registrations_screen.dart';
 import '../../features/events/wizard/event_wizard_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/profile/wizard/profile_wizard_screen.dart';
@@ -86,6 +88,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: LayoutEditorScreen.routePath,
         name: LayoutEditorScreen.routeName,
         builder: (context, state) => LayoutEditorScreen(
+          eventId: int.parse(state.pathParameters['eventId']!),
+        ),
+      ),
+      // Organizatörün başvuru onay ekranı (M3).
+      GoRoute(
+        path: RegistrationsScreen.routePath,
+        name: RegistrationsScreen.routeName,
+        builder: (context, state) => RegistrationsScreen(
+          eventId: int.parse(state.pathParameters['eventId']!),
+        ),
+      ),
+      // Katılımcının gördüğü etkinlik detayı. Yolu `/etkinlikler` altında
+      // değil: orası organizatörün sihirbazı, burası herkesin gördüğü yüz.
+      GoRoute(
+        path: PublicEventScreen.routePath,
+        name: PublicEventScreen.routeName,
+        builder: (context, state) => PublicEventScreen(
           eventId: int.parse(state.pathParameters['eventId']!),
         ),
       ),

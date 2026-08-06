@@ -86,7 +86,19 @@ Aşama 1'den devreden borç kapandı: masa ile alan bloğunun aynı hücreyi pay
 
 Tarayıcıda doğrulandı: otomatik 6 masa → manuele geçişte masalar korunup dizildi → sürükle-bırak ızgaraya oturdu → dolu hücreye bırakma "Bu hücre dolu: 5 numaralı masa." → sahne bloğu → numara çakışmasında satır içi uyarı → sayfa yenilemede düzen kayıpsız → sihirbaza dönüşte kapasite 36'dan 43'e güncellendi.
 
-**Sıradaki: Aşama 6 — Etkinlik keşfi ve başvuru.** Liste, detay, başvuru akışı, organizatörün başvuru yönetimi.
+**Aşama 6 bitti — etkinlik keşfi ve başvuru.**
+
+*Backend:* Keşif listesi, katılımcının gördüğü etkinlik detayı (organizatör alanları sızmıyor), başvuru kapıları, geri çekme, organizatörün onay/red uçları. 253 test.
+
+*İstemci:* Etkinlikler sekmesi ikiye ayrıldı (Keşfet / Düzenlediklerim), katılımcı detay ekranı, başvuru akışı, eksik profil kapısı, organizatörün onay ekranı. 61 test.
+
+Etiket havuzu 48'den **72'ye** çıktı (migration `0003`, üç yeni kategori). 72 bir tavan — sebebi aşağıdaki tuzaklarda.
+
+Aşama 3'te kurulan başvuru kapısı burada ilk kez iş görüyor: eksik profille başvuru 422 dönüyor ve eksikler Türkçe yazılıyor.
+
+Tarayıcıda doğrulandı: keşif listesi → eksik profille başvuru engellendi ve eksikler listelendi → profil tamamlanınca başvuru → organizatör profil özetiyle gördü ve onayladı → katılımcıda "Kabul edildi" → kontenjan dolunca onay düğmesi "Kontenjan dolu".
+
+**Sıradaki: Aşama 7 — Motorun bağlanması.** Arka plan işi, veritabanı↔motor dönüşümü, plan üretimi.
 
 ### API uçları
 
@@ -109,6 +121,12 @@ POST /events/{id}/tables           PATCH /events/{id}/tables/{tid}
 DELETE /events/{id}/tables/{tid}
 POST /events/{id}/areas            PATCH /events/{id}/areas/{aid}
 DELETE /events/{id}/areas/{aid}
+
+GET    /events/discover                 GET /events/{id}/public
+POST   /events/{id}/registration        DELETE /events/{id}/registration
+GET    /events/{id}/registrations?status=
+POST   /events/{id}/registrations/{rid}/approve
+POST   /events/{id}/registrations/{rid}/reject
 ```
 
 Çıkış ucu yok: jetonlar durumsuz, çıkış istemcide jetonu silmekle olur.
@@ -194,6 +212,16 @@ curl http://localhost:8000/health/ready   db ve redis'e erişiliyor mu
 **Veri değiştikten sonra `invalidate` tek başına yetmez.** Yeniden hesaplama asenkron başlar; hemen gezinirsen ekran eski veriyle açılır. `invalidate` + `await read(...future)` kullan — `EventActions` bu kalıbı izliyor.
 
 **Program hesabı iki yerde: `schedule.py` ve `schedule.dart`.** Birini değiştirirsen diğerini de değiştir; aynı senaryolar iki tarafta da test ediliyor (`test_schedule.py`, `schedule_test.dart`).
+
+**Sabit yollu uç, parametreli uçtan önce kaydedilmeli.** `main.py` içinde `registration.router`, `event.router`'dan önce geliyor; tersi olsaydı `/events/discover` yolu `/events/{event_id}` ile eşleşir ve "discover" bir kimlik sanılıp 422 dönerdi.
+
+**Katılımcıya `EventResponse` döndürme.** O şema organizatörün alanlarını taşıyor (`auto_approve_registrations`, `request_quota`, `capacity_summary`). Katılımcının gördüğü `PublicEventResponse` ayrı — alan gizlemek yerine ayrı şema, ileride organizatör yanıtına eklenen bir alan sessizce dışarı çıkmasın diye.
+
+**Süzgeçli listede tek süzgeci tazeleme.** `eventRegistrationsProvider` süzgeci argümanında tutuyor, yani her süzgeç ayrı bir önbellek. Onaylanan başvuru "bekleyen"den düşüp "kabul"e girmeli; `RegistrationActions._invalidateRegistrations` hepsini birden tazeliyor.
+
+**Etiket havuzuna etiket eklemeden önce ölç.** 72 bir tavan: kişi başı asgari seçim 3 olduğu sürece havuz büyüdükçe eşleşme çöküyor (84'te ortalama masa skoru 0.337'den 0.095'e düşüyor). Ölçüm komutu `python -m engine.cli --etiket <n> --secim 3`. Ayrıntı `docs/kararlar.md`'de.
+
+**Etiket silme. Yalnızca ekle.** `profile_tags` etiket kimliğine bakıyor; silinen etiketi seçmiş profiller etkilenir. Ad düzeltmek serbest, kimlik aynı kalıyor.
 
 **Hücre çakışmasını `find_cell_conflict()` üzerinden geçir.** Masa↔masa çakışmasını veritabanı indeksi de yakalar ama numara çakışmasıyla aynı `IntegrityError`'a düşer; mesaj yanlış çıkar. Masa↔alan bloğu çakışması ise **yalnızca** `app/services/layout.py` içinde kontrol ediliyor, şemada karşılığı yok.
 

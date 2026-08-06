@@ -6,10 +6,21 @@ import 'package:dio/dio.dart';
 /// beklenmedik durum kodu) burada Türkçesi üretilir. Ekranlar `DioException`
 /// görmemeli: teknik ayrıntı kullanıcıya bir şey anlatmıyor.
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode});
+  const ApiException(
+    this.message, {
+    this.statusCode,
+    this.missingForApplication = const [],
+  });
 
   final String message;
   final int? statusCode;
+
+  /// Başvuruyu engelleyen eksik profil alanlarının İngilizce anahtarları.
+  ///
+  /// Yalnızca etkinliğe başvuru reddedildiğinde dolu gelir (M3). Türkçe cümle
+  /// burada kurulmuyor: aynı anahtarların çevirisi profil ekranında zaten var
+  /// (`ProfileRequirement`), iki yerde iki farklı metin olmasın.
+  final List<String> missingForApplication;
 
   /// Oturum düştü mü — yönlendirmenin giriş ekranına dönmesi gerekiyor mu.
   bool get isUnauthorised => statusCode == 401;
@@ -25,15 +36,21 @@ class ApiException implements Exception {
       return ApiException(_messageForTransport(error.type));
     }
 
-    final detail = _detailOf(response.data);
-    if (detail != null) {
-      return ApiException(detail, statusCode: response.statusCode);
-    }
-
     return ApiException(
-      _messageForStatus(response.statusCode),
+      _detailOf(response.data) ?? _messageForStatus(response.statusCode),
       statusCode: response.statusCode,
+      missingForApplication: _missingFieldsOf(response.data),
     );
+  }
+
+  /// Yapılandırılmış hatadaki eksik alan listesi.
+  static List<String> _missingFieldsOf(dynamic data) {
+    if (data is! Map) return const [];
+    final detail = data['detail'];
+    if (detail is! Map) return const [];
+    final missing = detail['missing_for_application'];
+    if (missing is! List) return const [];
+    return missing.whereType<String>().toList();
   }
 
   static String _messageForTransport(DioExceptionType type) {
@@ -62,14 +79,22 @@ class ApiException implements Exception {
 
   /// FastAPI'nin `detail` alanını okur.
   ///
-  /// İki biçim geliyor: elle atılan hatalarda düz metin, doğrulama hatalarında
-  /// alan alan liste. İkincisinde ilk mesaj gösteriliyor — kullanıcıya aynı anda
-  /// beş hata basmak yardımcı olmuyor.
+  /// Üç biçim geliyor: elle atılan hatalarda düz metin, doğrulama hatalarında
+  /// alan alan liste, bazı uçlarda yapılandırılmış nesne. Listede ilk mesaj
+  /// gösteriliyor — kullanıcıya aynı anda beş hata basmak yardımcı olmuyor.
   static String? _detailOf(dynamic data) {
     if (data is! Map) return null;
     final detail = data['detail'];
 
-    if (detail is String && detail.isNotEmpty) return detail;
+    if (detail is String && detail.isNotEmpty) {
+      return _frameworkDefaults.contains(detail) ? null : detail;
+    }
+
+    // Yapılandırılmış hata (örneğin eksik profil): insan okuyacak kısım
+    // `message` alanında, geri kalanı arayüzün işleyeceği veri.
+    if (detail is Map && detail['message'] is String) {
+      return detail['message'] as String;
+    }
 
     if (detail is List && detail.isNotEmpty) {
       final first = detail.first;
@@ -79,6 +104,27 @@ class ApiException implements Exception {
     }
     return null;
   }
+
+  /// Sunucunun **bizim yazmadığımız** hata metinleri.
+  ///
+  /// Kendi yazdığımız her mesaj Türkçe. Bunlar FastAPI'nin varsayılanları:
+  /// tanımadığı bir yola istek gelince `detail` alanına HTTP durumunun
+  /// İngilizce adını koyuyor. Olduğu gibi gösterilirse Türkçe arayüzde
+  /// "Not Found" yazan kırmızı bir kutu çıkıyor (Bölüm 0: arayüz Türkçe).
+  /// Bu listeye düşen mesaj yok sayılıp durum koduna göre Türkçesi üretiliyor.
+  static const _frameworkDefaults = {
+    'Bad Request',
+    'Unauthorized',
+    'Forbidden',
+    'Not Found',
+    'Method Not Allowed',
+    'Conflict',
+    'Unprocessable Entity',
+    'Unprocessable Content',
+    'Too Many Requests',
+    'Internal Server Error',
+    'Service Unavailable',
+  };
 
   /// Pydantic'in İngilizce doğrulama mesajlarını Türkçeleştirir.
   ///

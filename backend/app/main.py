@@ -12,7 +12,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import auth, company, event, health, layout, profile, taxonomy
+from app.api.routes import (
+    auth,
+    company,
+    event,
+    health,
+    layout,
+    profile,
+    registration,
+    taxonomy,
+)
 from app.config import get_settings
 from app.db import dispose_engine
 
@@ -49,6 +58,10 @@ def create_app() -> FastAPI:
     application.include_router(profile.router)
     application.include_router(company.router)
     application.include_router(taxonomy.router)
+    # Keşif ucu etkinlik ucundan **önce** kaydediliyor: `/events/{event_id}`
+    # daha önce gelseydi `/events/discover` ona eşleşir ve "discover" bir
+    # kimlik sanılıp 422 dönerdi.
+    application.include_router(registration.router)
     application.include_router(event.router)
     application.include_router(layout.router)
 

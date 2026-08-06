@@ -41,6 +41,43 @@ final eventLayoutProvider =
   }
 });
 
+/// Başvurulabilecek yaklaşan etkinlikler (M3).
+final discoverEventsProvider = FutureProvider<List<DiscoverEvent>>((ref) {
+  return ref.watch(eventRepositoryProvider).discover();
+});
+
+/// Katılımcının gördüğü etkinlik detayı.
+final publicEventProvider =
+    FutureProvider.family<PublicEvent, int>((ref, eventId) {
+  return ref.watch(eventRepositoryProvider).loadPublic(eventId);
+});
+
+/// Organizatörün başvuru listesi; süzgeç sağlayıcının argümanında.
+final eventRegistrationsProvider =
+    FutureProvider.family<RegistrationSummary, RegistrationQuery>((ref, query) {
+  return ref
+      .watch(eventRepositoryProvider)
+      .loadRegistrations(query.eventId, status: query.status);
+});
+
+/// Başvuru listesinin sorgusu.
+///
+/// `family` argümanı olarak kullanıldığı için değer eşitliği şart: aynı süzgeç
+/// aynı önbelleğe düşmeli, her yeniden çizimde yeni istek atılmamalı.
+class RegistrationQuery {
+  const RegistrationQuery(this.eventId, [this.status]);
+
+  final int eventId;
+  final RegistrationStatus? status;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RegistrationQuery && other.eventId == eventId && other.status == status;
+
+  @override
+  int get hashCode => Object.hash(eventId, status);
+}
+
 /// Etkinliği değiştiren işlemler.
 ///
 /// Depoyu sarmalayıp değişiklikten sonra ilgili sağlayıcıları tazeliyor.
@@ -156,4 +193,74 @@ class EventActions {
 
 final eventActionsProvider = Provider.family<EventActions, int>((ref, eventId) {
   return EventActions(ref, eventId);
+});
+
+/// Başvuru işlemleri (M3).
+///
+/// `EventActions`'tan ayrı: o organizatörün sihirbazına hizmet ediyor, bu
+/// katılımcının ve onay ekranının. Aynı sınıfta toplamak, her ekranın
+/// ilgilenmediği sağlayıcıları da tazelemesine yol açardı.
+class RegistrationActions {
+  const RegistrationActions(this._ref, this.eventId);
+
+  final Ref _ref;
+  final int eventId;
+
+  EventRepository get _repository => _ref.read(eventRepositoryProvider);
+
+  Future<void> apply() async {
+    await _repository.apply(eventId);
+    await _refresh();
+  }
+
+  Future<void> withdraw() async {
+    await _repository.withdraw(eventId);
+    await _refresh();
+  }
+
+  Future<RegistrationSummary> approve(int registrationId) async {
+    final summary = await _repository.approveRegistration(
+      eventId: eventId,
+      registrationId: registrationId,
+    );
+    _invalidateRegistrations();
+    return summary;
+  }
+
+  Future<RegistrationSummary> reject(int registrationId) async {
+    final summary = await _repository.rejectRegistration(
+      eventId: eventId,
+      registrationId: registrationId,
+    );
+    _invalidateRegistrations();
+    return summary;
+  }
+
+  /// Başvuru sonrası detay ve keşif listesi birlikte tazeleniyor.
+  ///
+  /// İkisi de kalan kontenjanı ve başvuru durumunu gösteriyor; biri
+  /// güncellenip diğeri kalırsa kullanıcı iki farklı gerçek görür.
+  /// `invalidate` tek başına yetmiyor — yeniden hesaplama asenkron başlıyor
+  /// (Aşama 4'te öğrenildi).
+  Future<void> _refresh() async {
+    _ref.invalidate(publicEventProvider(eventId));
+    _ref.invalidate(discoverEventsProvider);
+    await _ref.read(publicEventProvider(eventId).future);
+  }
+
+  /// Onay listesinin bütün süzgeçlerini tazeler.
+  ///
+  /// Süzgeç sağlayıcının argümanında olduğu için her süzgeç ayrı bir önbellek.
+  /// Bir başvuru onaylandığında "bekleyen" listesinden düşüp "kabul" listesine
+  /// girmeli; yalnızca açık olanı tazelemek diğerlerini bayat bırakırdı.
+  void _invalidateRegistrations() {
+    for (final status in [null, ...RegistrationStatus.values]) {
+      _ref.invalidate(eventRegistrationsProvider(RegistrationQuery(eventId, status)));
+    }
+  }
+}
+
+final registrationActionsProvider =
+    Provider.family<RegistrationActions, int>((ref, eventId) {
+  return RegistrationActions(ref, eventId);
 });
