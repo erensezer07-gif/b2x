@@ -18,6 +18,7 @@ kimlik alıyor.
 
 import asyncio
 import logging
+from dataclasses import dataclass
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -169,41 +170,28 @@ async def unmatched_names(session: AsyncSession, event_id: int, plan_id: int) ->
     return [name or f"#{registration_id}" for name, registration_id in result.all()]
 
 
-async def request_counts(session: AsyncSession, event_id: int, plan_id: int) -> tuple[int, int]:
-    """*"Karşılanan talep sayısı / toplam talep"* (M7).
-
-    Bir talep, iki taraf planın herhangi bir turunda aynı masaya oturduysa
-    karşılanmış sayılıyor. Talep sistemi Aşama 10'da açılıyor; şimdilik ikisi
-    de sıfır dönüyor.
-    """
-    total = await session.execute(
-        select(func.count())
-        .select_from(MeetingRequest)
-        .where(
-            MeetingRequest.event_id == event_id,
-            MeetingRequest.status == MeetingRequestStatus.ACTIVE,
-        )
-    )
-    total_count = total.scalar_one()
-    if total_count == 0:
-        return 0, 0
-
+async def _together(session: AsyncSession, plan_id: int) -> set[tuple[int, int]]:
+    """Planın herhangi bir turunda aynı masaya oturan ikililer."""
     seats = await session.execute(
         select(Assignment.slot_number, Assignment.table_id, Assignment.registration_id).where(
             Assignment.plan_id == plan_id
         )
     )
-    together: set[tuple[int, int]] = set()
     by_table: dict[tuple[int, int], list[int]] = {}
     for slot, table, registration in seats.all():
         by_table.setdefault((slot, table), []).append(registration)
+
+    pairs: set[tuple[int, int]] = set()
     for people in by_table.values():
         ordered = sorted(people)
         for position, first in enumerate(ordered):
             for second in ordered[position + 1 :]:
-                together.add((first, second))
+                pairs.add((first, second))
+    return pairs
 
-    requests = await session.execute(
+
+async def _active_requests(session: AsyncSession, event_id: int) -> list[tuple[int, int]]:
+    result = await session.execute(
         select(
             MeetingRequest.requester_registration_id,
             MeetingRequest.target_registration_id,
@@ -212,9 +200,120 @@ async def request_counts(session: AsyncSession, event_id: int, plan_id: int) -> 
             MeetingRequest.status == MeetingRequestStatus.ACTIVE,
         )
     )
+    return [(requester, target) for requester, target in result.all()]
+
+
+async def request_counts(session: AsyncSession, event_id: int, plan_id: int) -> tuple[int, int]:
+    """*"Karşılanan talep sayısı / toplam talep"* (M7).
+
+    Bir talep, iki taraf planın herhangi bir turunda aynı masaya oturduysa
+    karşılanmış sayılıyor. Karşılıklı talep **iki** talep sayılıyor: ikisi de
+    isteğini almış oluyor.
+    """
+    requests = await _active_requests(session, event_id)
+    if not requests:
+        return 0, 0
+
+    together = await _together(session, plan_id)
     satisfied = sum(
         1
-        for requester, target in requests.all()
+        for requester, target in requests
         if (min(requester, target), max(requester, target)) in together
     )
-    return satisfied, total_count
+    return satisfied, len(requests)
+
+
+@dataclass(frozen=True, slots=True)
+class UnmetRequest:
+    """Karşılanmayan bir talep (M9, organizatör görünümü).
+
+    `fixable_slot` iki tarafın da oturduğu ama farklı masalara düştüğü ilk
+    tur — takasla düzeltilebilecek yer. İkisi hiçbir turda birlikte
+    oturmuyorsa (biri hep boşta kaldıysa) `None`.
+    """
+
+    requester_registration_id: int
+    target_registration_id: int
+    requester_name: str
+    target_name: str
+
+    # İkisi de birbirini istemiş mi. M9 buna "neredeyse kesin eşleşme" diyor;
+    # karşılanmadıysa gerçek bir kusur.
+    mutual: bool
+
+    fixable_slot: int | None
+
+
+async def unmet_requests(session: AsyncSession, event_id: int, plan_id: int) -> list[UnmetRequest]:
+    """*"Organizatör plan ekranında karşılanmayan talepleri görür."* (M9)
+
+    Karşılanmış talepler dönmüyor: yapılacak bir şey kalmamış. Karşılıklı
+    ikili **tek satır** olarak dönüyor — iki yönü ayrı göstermek aynı sorunu
+    iki kez saymak olurdu.
+
+    Sıralama karşılıklılar önce: düzeltilmesi gereken onlar.
+    """
+    requests = await _active_requests(session, event_id)
+    if not requests:
+        return []
+
+    together = await _together(session, plan_id)
+    directions = set(requests)
+
+    # (küçük, büyük) → karşılıklı mı. Karşılanmışlar hiç girmiyor.
+    pairs: dict[tuple[int, int], bool] = {}
+    for requester, target in requests:
+        key = (min(requester, target), max(requester, target))
+        if key in together:
+            continue
+        mutual = (target, requester) in directions
+        pairs[key] = pairs.get(key, False) or mutual
+
+    if not pairs:
+        return []
+
+    names = await _names(session, event_id)
+    seats = await session.execute(
+        select(Assignment.slot_number, Assignment.table_id, Assignment.registration_id).where(
+            Assignment.plan_id == plan_id
+        )
+    )
+    where_seated: dict[int, dict[int, int]] = {}
+    for slot, table, registration in seats.all():
+        where_seated.setdefault(registration, {})[slot] = table
+
+    rows = [
+        UnmetRequest(
+            requester_registration_id=first,
+            target_registration_id=second,
+            requester_name=names.get(first, f"#{first}"),
+            target_name=names.get(second, f"#{second}"),
+            mutual=mutual,
+            fixable_slot=_fixable_slot(where_seated, first, second),
+        )
+        for (first, second), mutual in pairs.items()
+    ]
+    rows.sort(key=lambda row: (not row.mutual, row.requester_name, row.target_name))
+    return rows
+
+
+def _fixable_slot(where_seated: dict[int, dict[int, int]], first: int, second: int) -> int | None:
+    """İkisinin de oturduğu ama farklı masalara düştüğü ilk tur."""
+    mine = where_seated.get(first, {})
+    theirs = where_seated.get(second, {})
+    for slot in sorted(set(mine) & set(theirs)):
+        if mine[slot] != theirs[slot]:
+            return slot
+    return None
+
+
+async def _names(session: AsyncSession, event_id: int) -> dict[int, str]:
+    result = await session.execute(
+        select(Registration.id, Profile.full_name)
+        .join(User, User.id == Registration.user_id)
+        .join(Profile, Profile.user_id == User.id, isouter=True)
+        .where(Registration.event_id == event_id)
+    )
+    return {
+        registration_id: name or f"#{registration_id}" for registration_id, name in result.all()
+    }

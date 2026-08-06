@@ -1505,3 +1505,72 @@ hata cümlesi ancak denemeler yavaşlayınca çıkıyordu. Tarayıcıda görüld
 
 `ProviderScope(retry: ...)` ile tek yerden: 4xx hiç denenmiyor, gerisi üç kez
 ve artan aralıklarla.
+
+## Aşama 10 — Görüşme talepleri (Tur 1: backend)
+
+### Gelen talep ucu hiç yazılmadı
+
+M9: *"Talep gönderildiği kişiye bildirilmez. Karşı taraf kimin kendisini
+istediğini görmez. Sebep: sosyal baskı yaratmamak."*
+
+Kural bir süzgeçle değil, **ucun yokluğuyla** uygulanıyor. Okunacak bir yer
+olmadığı için sızacak bir yer de yok. Aşama 9'daki "kimlik parametresi
+almayan uç" kararının kardeşi.
+
+`ParticipantRowResponse.my_request_id` yalnızca **benim** gönderdiğim talebi
+taşıyor; karşı tarafın bana talep gönderip göndermediği hiçbir alanda yok.
+
+### Katılımcı listesi tam profil açmıyor
+
+M9 listeyi tarif ederken dört alan sayıyor: ad, unvan, şirket, sektör. Tam
+profil Bölüm 7 gereği yalnızca aynı masaya düşenler için. Liste "kimi
+seçeyim" sorusunu cevaplıyor, profil gezmeye yaramıyor.
+
+Ayrı bir şema kullanıldı (`ParticipantRowResponse`), `TablemateProfileResponse`
+kırpılmadı — alan gizlemek yerine ayrı şema, Aşama 6 ve 9'daki kalıp.
+
+### Geri çekme hakkı iade ediyor
+
+Kıtlığın anlamı *"aynı anda kaç kişiyi istiyorsun"*. Yanlış kişiye gönderilen
+talep düzeltilebilmeli; iade etmemek kullanıcıyı hatasıyla baş başa
+bırakırdı. Aynı anda en fazla `request_quota` aktif talep — sınır korunuyor.
+
+### Geri çekilen satır silinmiyor, canlandırılıyor
+
+`uq_meeting_requests_pair` ikili benzersizliğini **duruma bakmadan** zorluyor.
+Geri çekilmiş bir kişiye tekrar talep gönderilirken yeni satır eklemek
+`IntegrityError` verirdi. Aşama 6'daki başvuru geri çekme kalıbının aynısı.
+
+### Kapanıştan sonra geri çekme de kapalı
+
+İlk düşünce "göndermeyi kapat, geri çekmeye izin ver" idi. Ama M9'un gerekçesi
+*"kapanmazsa plan hiç kilitlenemez"* — geri çekme de talep kümesini
+değiştiriyor ve kilitlenmiş bir planı yeniden oynatırdı.
+
+### Organizatör yalnızca karşılanmayanları görüyor
+
+Şartnameye eklendi (M9). Karşılanmış bir talebin operasyonel karşılığı yok:
+yapılacak bir şey kalmamış. Genel bir "kim kimi istemiş" listesi de
+yazılmadı — organizatörün işi planı düzeltmek, kimin kimden hoşlandığını
+öğrenmek değil.
+
+İki grup ayrı:
+
+* **Karşılıklı ve karşılanmamış** — M9'un "neredeyse kesin eşleşme" dediği
+  durum kaçırılmış. Gerçek bir kusur, elle takasla düzeltilir. `fixable_slot`
+  iki tarafın da oturduğu ama farklı masalara düştüğü ilk turu veriyor;
+  organizatör oradan doğrudan takas ekranına gidiyor.
+* **Tek taraflı ve karşılanmamış** — bilgi olarak. Zorlanması önerilmiyor:
+  karşı taraf için değerli olduğu belli değil ve zorlamak onun planını bozar.
+
+Karşılıklı ikili **tek satır**: iki yönü ayrı göstermek aynı sorunu iki kez
+saymak olurdu. Ama `satisfied_requests / total_requests` sayacında karşılıklı
+talep **iki** talep — ikisi de isteğini almış oluyor.
+
+### Talep bonusu ilk kez gerçek veriyle çalıştı
+
+`meeting_requests` tablosu Aşama 1'den beri duruyordu ama hep boştu; dönüşüm
+(`_load_requests`) ve ağırlıklar (karşılıklı 0.35, tek taraflı 0.12) Aşama
+2-7'de yazılıp hiç tetiklenmemişti. Test karşılıklı talep kurup planı
+çalıştırıyor ve ikisinin aynı masaya düştüğünü doğrudan atamalardan
+doğruluyor.

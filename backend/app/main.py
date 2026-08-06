@@ -18,6 +18,7 @@ from app.api.routes import (
     event,
     health,
     layout,
+    meeting_request,
     participant_plan,
     plan,
     profile,
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     application.include_router(layout.router)
     application.include_router(plan.router)
     application.include_router(participant_plan.router)
+    application.include_router(meeting_request.router)
 
     _mount_local_storage(application, settings.storage_backend, settings.storage_local_path)
     return application

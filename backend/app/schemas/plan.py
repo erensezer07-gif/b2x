@@ -6,6 +6,7 @@ from typing import Self
 from pydantic import BaseModel, Field, model_validator
 
 from app.models import JobStatus, PlanStatus
+from app.schemas.meeting_request import UnmetRequestResponse
 from app.services.plan_editing import TableQuality
 
 
@@ -68,10 +69,13 @@ class PlanSummaryResponse(BaseModel):
     # hiçbir turda masaya oturmamış kişiler.
     unmatched: list[str]
 
-    # *"Karşılanan talep sayısı / toplam talep"* (M7). Talep sistemi Aşama
-    # 10'da açılıyor; şimdilik ikisi de sıfır.
+    # *"Karşılanan talep sayısı / toplam talep"* (M7).
     satisfied_requests: int
     total_requests: int
+
+    # *"Organizatör plan ekranında karşılanmayan talepleri görür."* (M9)
+    # Karşılanmışlar dönmüyor: yapılacak bir şey kalmamış.
+    unmet_requests: list[UnmetRequestResponse]
 
 
 class SeatedPersonResponse(BaseModel):

@@ -456,6 +456,7 @@ Planın genel sağlığı tek bakışta görünmeli:
 - **En az görüşme alan kişi kaç görüşme aldı** — bu en önemli sayı
 - Hiç eşleşmemiş kişi var mı, varsa kimler
 - Karşılanan talep sayısı / toplam talep
+- **Karşılanmayan talepler** — ayrıntısı M9'da; karşılıklı olanlar vurgulu, her satırdan ilgili tura gidilir
 
 #### Elle düzeltme — takas yöntemi
 
@@ -538,6 +539,21 @@ Bu sınır olmazsa herkes herkese talep atar ve sistem "en çok talep atan kazan
 **Talepler bir zamanda kapanır.** Etkinlikten önce belirlenmiş bir anda talep sistemi kapanır. Kapanmazsa plan hiç kilitlenemez.
 
 **Talep garanti değildir.** Arayüzde bu açıkça yazılır: "Talepleriniz eşleştirmede öncelikli değerlendirilir, ancak karşılanacağı garanti edilmez."
+
+**Talep geri çekilebilir ve hak iade edilir.** Kıtlığın anlamı "aynı anda kaç kişiyi istiyorsun"; yanlış kişiye gönderilen talep düzeltilebilmeli. Talepler kapandıktan sonra geri çekme de kapanır — açık bırakmak planı yeniden oynatırdı.
+
+**Katılımcı listesi tam profil açmaz.** Listede ad, unvan, şirket ve sektör görünür; tam profil yalnızca aynı masaya düşen kişiler için açılır (Bölüm 7). Liste "kimi seçeyim" sorusunu cevaplar, profil gezmeye yaramaz.
+
+#### Organizatörün gördüğü: karşılanmayan talepler
+
+Organizatör plan ekranında **karşılanmayan** talepleri görür. Karşılanmış bir talebin operasyonel karşılığı yoktur; yapılacak bir şey kalmamıştır.
+
+İki grup ayrı gösterilir:
+
+- **Karşılıklı ve karşılanmamış.** İkisi de birbirini istemiş ama aynı masaya düşmemiş. Yukarıda "neredeyse kesin eşleşme" denen durum kaçırılmış demektir; gerçek bir kusurdur ve elle takasla düzeltilebilir. Her satırdan ilgili tura gidilir.
+- **Tek taraflı ve karşılanmamış.** Bilgi olarak, kapalı bir listede. Zorlanması **önerilmez**: tek taraflı talep güçlü bir tercihtir, karşı taraf için değerli olduğu belli değildir ve zorlamak onun planını bozar.
+
+Bu, "talep gönderildiği kişiye bildirilmez" kuralıyla çelişmez — o kural katılımcıyı korur, organizatör zaten planın tamamını görür.
 
 ### M10 — Check-in ve planın yenilenmesi
 

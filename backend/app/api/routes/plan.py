@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from app.api.deps import JobQueueDep, OwnedEvent, SessionDep
 from app.models import Assignment, JobStatus, Plan
+from app.schemas.meeting_request import UnmetRequestResponse
 from app.schemas.plan import (
     MatchingCheckResponse,
     PinRequest,
@@ -41,6 +42,7 @@ from app.services.plan_runner import (
     request_counts,
     seated_participant_count,
     unmatched_names,
+    unmet_requests,
 )
 
 router = APIRouter(prefix="/events/{event_id}", tags=["esletirme"])
@@ -90,6 +92,17 @@ async def _to_response(session: SessionDep, plan: Plan) -> PlanSummaryResponse:
         unmatched=await unmatched_names(session, plan.event_id, plan.id),
         satisfied_requests=satisfied,
         total_requests=total,
+        unmet_requests=[
+            UnmetRequestResponse(
+                requester_registration_id=row.requester_registration_id,
+                target_registration_id=row.target_registration_id,
+                requester_name=row.requester_name,
+                target_name=row.target_name,
+                mutual=row.mutual,
+                fixable_slot=row.fixable_slot,
+            )
+            for row in await unmet_requests(session, plan.event_id, plan.id)
+        ],
     )
 
 
