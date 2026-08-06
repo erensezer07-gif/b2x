@@ -1384,3 +1384,74 @@ Elenen alternatifler:
 * **Eşiğin altındaki ikili oranı.** Masa boyundan bağımsız ama tek bir kişi
   dışlandığında (o kişinin bütün bağları kötü) oran hâlâ küçük kalıyor —
   tam da yakalanması gereken durum.
+
+## Aşama 9 — Katılımcı görünümü (Tur 1: backend)
+
+### Uçlar kimlik parametresi almıyor
+
+`/my-plan` ve `/tablemates/{id}` kimliği **jetondan** alıyor. Başkasının
+planını istemek diye bir istek biçimi kurulmadı: parametre yoksa yetki hatası
+da olamaz. Bölüm 7'nin *"istek doğrudan atılsa bile veri dönmemeli"* kuralına
+en ucuz uyum yolu, isteği kurulamaz hâle getirmek.
+
+### Masa arkadaşı sorgudan çıkıyor, süzgeçten değil
+
+Önce kişinin kendi ataması bulunuyor, sonra **yalnızca o (tur, masa)
+çiftlerinin** oturanları okunuyor. Planın tamamını çekip fazlasını atmak aynı
+sonucu verirdi ama bir gün atmayı unutan bir satır bütün planı sızdırırdı.
+Sorgu dar tutuldu.
+
+### Katılımcı yanıtı ayrı şema, alan gizleme değil
+
+`TableViewResponse` organizatörün; skoru ve kalite rozetini taşıyor.
+Katılımcının gördüğü `MySlotResponse` ayrı bir şema. Aşama 6'daki
+`PublicEventResponse` kararının aynısı: ileride organizatör yanıtına eklenen
+bir alan sessizce dışarı çıkmasın.
+
+Bir test yanıtın **tamamını** tarayıp `score`, `quality`, `breakdown` gibi
+anahtarların hiçbirinin bulunmadığını doğruluyor. Bölüm 10: *"Hiçbir yerde
+sayısal skor görünmüyor."*
+
+### Gerekçe cümlesi sunucuda kurulmuyor
+
+Sunucu `{kind, values}` gönderiyor, Türkçe cümleyi arayüz kuruyor. Aşama
+6-7-8'deki kalıp: bütün Türkçe metin tek katmanda.
+
+### Etiket adları okuma anında hesaplanıyor
+
+`match_reasons.breakdown` yalnızca hangi bileşenden kaç puan geldiğini
+saklıyor (9.3). Hangi etiketin, hangi **yönde** eşleştiğini söylemiyor —
+arz-talep tek sayıya inmiş durumda. "Kendisi X sunuyor, siz X arıyorsunuz"
+cümlesi ancak iki profilin kesiştirilmesiyle çıkıyor.
+
+Saklamak da mümkündü ama profil değiştiğinde eskiyen bir kopya bırakırdı.
+Okuma anında hesaplamak hem taze hem ucuz: masa başına birkaç küme kesişimi.
+
+### Ceza kalemi gerekçe olamaz
+
+`similarity_penalty` negatif bir katkı; "neden eşleştiniz" sorusunun cevabı
+değil. Sıralamaya hiç girmiyor. Puanı olan ama profilde karşılığı bulunmayan
+bir bileşen de atlanıyor — plan üretildikten sonra profil değişmiş olabilir ve
+boş bir cümle göstermektense o gerekçeyi hiç göstermemek doğru.
+
+### Tek taraflı talep gerekçe olarak gösterilmiyor
+
+M9: *"Talep gönderildiği kişiye bildirilmez... sosyal baskı yaratmamak."*
+Karşılıklı talep en üstte anlatılıyor (skoru ne olursa olsun), tek taraflısı
+hiç anlatılmıyor. Kendi talebini geri okumak da bir şey katmıyor.
+
+### Kroki ayrı uç, oturansız
+
+Masa numaraları ve yerleri sır değil — katılımcı kendi masasını krokide
+bulabilmeli (M8). Sır olan kimin oturduğu. `/venue` yalnızca ızgarayı,
+masaları ve alan bloklarını taşıyor; oturan bilgisi bu uçtan **hiç** dönmüyor.
+
+### Etiketin kategorisine kadar eager yükleme
+
+`_categories` etiketin kategori adını okuyor. Yüklenmezse SQLAlchemy
+eşzamansız bir yeniden yükleme dener ve `MissingGreenlet` verir — hata
+yolunda değil, doğrudan yanıt yolunda. Aynı tuzağa `plan_runner._fail`
+düşmüştü; orada `rollback` sonrasıydı, burada eksik `selectinload`.
+
+Bakanın **kendi** profili de yükleniyor: "siz bunu arıyorsunuz" cümlesi
+onun etiketlerini gerektiriyor.
