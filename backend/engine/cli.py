@@ -16,6 +16,7 @@ oluyor — Aşama 7'de uygulama katmanı aynı verilerle çalışacak.
 
 import argparse
 from collections import Counter
+from dataclasses import replace
 
 import numpy as np
 
@@ -24,6 +25,7 @@ from engine.runner import RunTrace, run_matching_with_trace
 from engine.scoring import build_synergy_model
 from engine.synthetic import ScenarioSpec, build_scenario
 from engine.types import EngineInput, EngineOutput, EngineSettings
+from engine.weights import DEFAULT_WEIGHTS
 
 PERCENTILES = (10, 25, 50, 75, 90, 99)
 RULE_REPORT_LIMIT = 20
@@ -44,6 +46,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--etiket", type=int, default=40, help="etiket havuzu genişliği")
     parser.add_argument("--alan", type=int, default=5, help="etiket havuzundaki ilgi alanı sayısı")
     parser.add_argument("--secim", type=int, default=4, help="kişi başına sunulan/aranan etiket")
+    parser.add_argument("--kategori", type=int, default=6, help="etiket kategorisi sayısı")
+    parser.add_argument(
+        "--kategori-puani",
+        type=float,
+        default=None,
+        help="kategori düzeyinde kısmi puan katsayısı (0 = kapalı)",
+    )
     parser.add_argument("--talep", type=int, default=150, help="görüşme talebi sayısı")
     parser.add_argument(
         "--uyum", type=float, default=1.0, help="0.0 kimse kimseye uymaz, 1.0 eşleşme bol"
@@ -202,6 +211,7 @@ def main(argv: list[str] | None = None) -> int:
         city_count=args.sehir,
         tag_count=args.etiket,
         theme_count=args.alan,
+        category_count=args.kategori,
         offered_per_person=args.secim,
         sought_per_person=args.secim,
         compatibility=args.uyum,
@@ -209,11 +219,16 @@ def main(argv: list[str] | None = None) -> int:
         standing_tables=args.ayakli,
         seed=args.tohum,
     )
+    weights = DEFAULT_WEIGHTS
+    if args.kategori_puani is not None:
+        weights = replace(weights, category_credit=args.kategori_puani)
+
     settings = EngineSettings(
         min_meetings_per_person=args.asgari_tur,
         quality_threshold=args.esik,
         max_iterations=args.deneme,
         seed=args.tohum,
+        weights=weights,
     )
     engine_input = build_scenario(spec, settings=settings)
 

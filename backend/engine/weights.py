@@ -17,6 +17,9 @@ temel  = (arz_talep × w_sd + sektör × w_sektör + şehir × w_şehir) / (w_sd
 skor   = kırp(temel + talep_bonusu − benzerlik_cezası, 0, 1)
 ```
 
+Arz-talep bileşeni etiket eşleşmesini iki düzeyde okur — tam etiket ve
+kategori. Ayrıntı `category_credit` alanının yanında.
+
 Temel kısım ağırlık toplamına bölündüğü için her zaman [0, 1] içinde kalır;
 ağırlıkların oranı önemlidir, mutlak büyüklükleri değil. Talep bonusu ve
 benzerlik cezası bunun üstüne eklenir.
@@ -65,6 +68,41 @@ class SynergyWeights:
     # kez cezalandırıyordu — hem ortalama hem bölen küçültüyor, mükemmel tek
     # yönlü bir eşleşme bile kalite eşiğinin altında kalıyordu.
     mutual_supply_demand_bonus: float = 0.6
+
+    # --- Kategori düzeyinde kısmi puan (9.3) ---
+
+    # Tam etiket eşleşmesi olmadığında, aynı **kategoride** buluşan ikiliye
+    # verilen puanın tam eşleşmeye oranı.
+    #
+    # Sebep: etiketler ince bölündükçe alıcıyla satıcı aynı kelimeyi seçmiyor.
+    # "Backend geliştirme" sunan ile "Web yazılımı" arayan bugün sıfır alıyor,
+    # oysa ikisi de "Yazılım ve teknoloji" kategorisinde ve muhtemelen iyi bir
+    # görüşme.
+    #
+    # Terim:
+    #
+    #     ileri = max( tam_oran , category_credit × kategori_oranı )
+    #
+    # `max`, toplam değil: tam eşleşme kategoriyi **gölgeler**. Toplasaydık
+    # etiketi tutan ikili bir de kategoriden puan alır ve doyum anlamını
+    # yitirirdi.
+    #
+    # 0.0 verilirse davranış kategori öncesiyle birebir aynıdır; bir test bunu
+    # kilitliyor.
+    #
+    # **Üst sınır `1 / supply_demand_saturation`.** Kategori örtüşmesi tek bir
+    # tam etiket eşleşmesini geçmemeli — bir tam eşleşme, "aynı iki
+    # kategorideyiz"den daha güçlü bir kanıt. Ayrı bir test bu sınırı koruyor.
+    category_credit: float = 0.30
+
+    # Kaç ortak kategoriden sonra doyuma ulaşılır. **Bir.**
+    #
+    # Kişi başı asgari üç etiket (M2) pratikte bir ya da iki kategoriye
+    # düşüyor; iki ortak kategori nadir. Doyum 2 olduğunda tek ortak kategori
+    # yalnızca yarım puan alıyordu ve kısmi puan etkisiz kalıyordu. Ölçüldü:
+    # 120 etiketlik havuzda ortalama masa skoru doyum 2 ile 0.128, doyum 1 ile
+    # 0.317 (`docs/kararlar.md`).
+    category_saturation: int = 1
 
     # --- Talep bonusu (temelin üstüne eklenir) ---
 

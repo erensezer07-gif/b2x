@@ -32,12 +32,19 @@ class Participant:
     karşılaştırması yapmaz. Şirket kimliği kritik: aynı şirketten iki kişi aynı
     masaya oturamaz (9.5) ve bu karşılaştırma serbest metinle değil kimlikle
     yapılır (Bölüm 6).
+
+    Kategoriler etiketlerden **türetilir** ama motor türetemez: etiket→kategori
+    haritası veritabanında durur ve motor veritabanı bilmez (5.1). Dönüştürme
+    dış katmanın işi. Boş bırakılırsa kategori düzeyinde kısmi puan hiç
+    devreye girmez.
     """
 
     index: int
     company: int
     offered_tags: frozenset[int] = frozenset()
     sought_tags: frozenset[int] = frozenset()
+    offered_categories: frozenset[int] = frozenset()
+    sought_categories: frozenset[int] = frozenset()
     sector: int | None = None
     city: int | None = None
 

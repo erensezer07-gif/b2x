@@ -595,6 +595,12 @@ Motor veritabanı kimlikleri yerine kendi içinde tam sayı indeks kullanır. D�
 
 **Arz-talep eşleşmesi (en ağırlıklı).** A'nın sunduğu etiketlerle B'nin aradığı etiketlerin kesişimi. Ters yönü de hesaplanır. Çift yönlü eşleşme (A B'ye yarıyor VE B A'ya yarıyor) tek yönlüden çok daha değerlidir.
 
+**Kategori düzeyinde kısmi puan.** Tam etiket eşleşmesi yoksa, etiketlerin **kategorileri** karşılaştırılır: A'nın sunduğu etiketlerin kategorileriyle B'nin aradıklarının kategorileri kesişiyorsa kısmi puan verilir. Tam eşleşme her zaman kısmiyi gölgeler — ikisi toplanmaz, büyüğü alınır.
+
+Sebep: etiket havuzu inceldikçe alıcıyla satıcı aynı kelimeyi seçmiyor. "Backend geliştirme" sunan ile "Web yazılımı" arayan kesin bir eşleşme ama farklı etiket seçmişler. Kısmi puan olmadan sıfır alırlar.
+
+Kısmi puanın üst sınırı **tek bir tam etiket eşleşmesidir**: bir tam eşleşme, "aynı alandayız"dan daha güçlü bir kanıttır. Sektör bonusu da kısmi puanla açılmaz — tam eşleşme arar, yoksa zayıf bir sinyal iki kez sayılmış olur.
+
 **Sektör ilişkisi.** Aynı sektör bazen iyidir (ortak dil), bazen kötüdür (rakipler). Bunu "aynı sektör = iyi" diye basitleştirme. Doğrusu: aynı sektörde olup **biri sunan biri arayan** ise çok iyi; ikisi de aynı şeyi sunuyorsa nötr veya düşük.
 
 **Coğrafi yakınlık.** Aynı şehir küçük bir artı.
@@ -806,7 +812,7 @@ Bu numaralandırma projenin yapım sırasıdır. Algoritmanın içindeki "Adım"
 
 Bunlar henüz netleşmedi, ilerledikçe doldurulacak.
 
-- ~~Etiket havuzunun içeriği: kaç kategori, her kategoride hangi etiketler~~ — Aşama 3'te başlangıç seti kondu (6×8), Aşama 6'da 9 kategori × 8 etikete çıkarıldı. **72 bir tavandır:** kişi başı asgari seçim 3 olduğu sürece havuz büyüdükçe eşleşme çöküyor (ölçüm `docs/kararlar.md`'de). Daha büyük havuz isteniyorsa önce 9.3'e kategori düzeyinde kısmi puan eklenmeli
+- ~~Etiket havuzunun içeriği: kaç kategori, her kategoride hangi etiketler~~ — Aşama 3'te başlangıç seti kondu (6×8), Aşama 6'da 9 kategori × 8 etikete çıkarıldı. Aşama 7'de 9.3'e kategori düzeyinde kısmi puan eklenince tavan yükseldi: **~120 etiket** artık bugünkü 72 kadar iyi sonuç veriyor. Kategori sayısı 9-15'te kalmak şartıyla — kategoriler etiketlerle birlikte çoğalırsa kısmi puanın etkisi kayboluyor (ölçüm `docs/kararlar.md`'de)
 - ~~Sektör listesinin içeriği~~ — Aşama 3'te başlangıç seti kondu: 18 sektör. Gerçek etkinlik verisiyle ayarlanacak
 - Sinerji skoru bileşenlerinin başlangıç ağırlıkları (test verisiyle ayarlanacak)
 - Kalite eşiğinin nihai değeri — başlangıç değeri ortam dosyasında, test verisiyle ayarlanacak

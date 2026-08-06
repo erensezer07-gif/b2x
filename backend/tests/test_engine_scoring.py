@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from engine.scoring import (
+    CATEGORY,
     CITY,
     REQUEST,
     SECTOR,
@@ -19,13 +20,21 @@ from engine.scoring import (
     SUPPLY_DEMAND,
     build_synergy_model,
 )
-from engine.types import EngineInput, MeetingRequestPair, Participant, TableSpec
+from engine.types import (
+    EngineInput,
+    EngineSettings,
+    MeetingRequestPair,
+    Participant,
+    TableSpec,
+)
 from engine.types import TableKind as Kind
+from engine.weights import DEFAULT_WEIGHTS, SynergyWeights
 
 
 def build_input(
     participants: list[Participant],
     requests: tuple[MeetingRequestPair, ...] = (),
+    weights: SynergyWeights | None = None,
 ) -> EngineInput:
     """Skorlama testleri için en küçük geçerli girdi."""
     return EngineInput(
@@ -33,6 +42,7 @@ def build_input(
         tables=(TableSpec(index=0, kind=Kind.SEATED, capacity=6),),
         slot_count=1,
         requests=requests,
+        settings=EngineSettings(weights=weights or DEFAULT_WEIGHTS),
     )
 
 
@@ -42,6 +52,8 @@ def person(
     company: int | None = None,
     offers: Iterable[int] = (),
     seeks: Iterable[int] = (),
+    offer_categories: Iterable[int] = (),
+    seek_categories: Iterable[int] = (),
     sector: int | None = None,
     city: int | None = None,
 ) -> Participant:
@@ -50,14 +62,147 @@ def person(
         company=company if company is not None else index,
         offered_tags=frozenset(offers),
         sought_tags=frozenset(seeks),
+        offered_categories=frozenset(offer_categories),
+        sought_categories=frozenset(seek_categories),
         sector=sector,
         city=city,
     )
 
 
-def score_of(participants: list[Participant], requests: tuple = ()) -> float:
-    model = build_synergy_model(build_input(participants, requests))
+def score_of(
+    participants: list[Participant],
+    requests: tuple = (),
+    weights: SynergyWeights | None = None,
+) -> float:
+    model = build_synergy_model(build_input(participants, requests, weights))
     return model.score(0, 1)
+
+
+# --- Kategori düzeyinde kısmi puan (9.3) ------------------------------------
+
+
+def test_same_category_earns_partial_credit_without_an_exact_tag() -> None:
+    """9.3: aynı kategoride buluşan ikili sıfır almamalı.
+
+    "Backend geliştirme" sunan ile "Web yazılımı" arayan farklı etiket seçmiş
+    ama aynı işi konuşuyorlar. Etiket havuzu inceldikçe bu durum kural hâline
+    geliyor.
+    """
+    pair = [
+        person(0, offers={1}, offer_categories={10}),
+        person(1, seeks={2}, seek_categories={10}),
+    ]
+    unrelated = [
+        person(0, offers={1}, offer_categories={10}),
+        person(1, seeks={2}, seek_categories={20}),
+    ]
+
+    assert score_of(pair) > score_of(unrelated)
+    assert score_of(unrelated) == pytest.approx(0.0)
+
+
+def test_exact_tag_beats_category_only() -> None:
+    """Kısmi puan tam eşleşmenin yerine geçmiyor, altında kalıyor."""
+    exact = [
+        person(0, offers={1}, offer_categories={10}),
+        person(1, seeks={1}, seek_categories={10}),
+    ]
+    category_only = [
+        person(0, offers={1}, offer_categories={10}),
+        person(1, seeks={2}, seek_categories={10}),
+    ]
+
+    assert score_of(exact) > score_of(category_only)
+
+
+def test_category_does_not_add_on_top_of_an_exact_match() -> None:
+    """Terim `max`, toplam değil.
+
+    Toplasaydık etiketi tutan ikili bir de kategoriden puan alır ve doyum
+    anlamını yitirirdi.
+    """
+    with_category = [
+        person(0, offers={1, 2, 3}, offer_categories={10}),
+        person(1, seeks={1, 2, 3}, seek_categories={10}),
+    ]
+    without_category = [
+        person(0, offers={1, 2, 3}),
+        person(1, seeks={1, 2, 3}),
+    ]
+
+    assert score_of(with_category) == pytest.approx(score_of(without_category))
+
+
+def test_zero_credit_reproduces_the_previous_behaviour() -> None:
+    """Katsayı 0 iken motor kategori öncesiyle birebir aynı davranmalı.
+
+    Değişikliğin geri alınabilir olduğunun kanıtı: ayar tek sayı.
+    """
+    off = SynergyWeights(category_credit=0.0)
+    people = [
+        person(0, offers={1}, offer_categories={10}, sector=1, city=1),
+        person(1, seeks={2}, seek_categories={10}, sector=1, city=1),
+    ]
+    without_categories = [
+        person(0, offers={1}, sector=1, city=1),
+        person(1, seeks={2}, sector=1, city=1),
+    ]
+
+    assert score_of(people, weights=off) == pytest.approx(score_of(without_categories, weights=off))
+
+
+def test_category_credit_never_exceeds_one_exact_match() -> None:
+    """Değişmez: kategori örtüşmesi tek bir tam etiket eşleşmesini geçemez.
+
+    Bir tam eşleşme, "aynı iki kategorideyiz"den daha güçlü bir kanıt. Katsayı
+    ayarlanırken bu sınır korunmalı.
+    """
+    w = DEFAULT_WEIGHTS
+    one_exact = 1 / w.supply_demand_saturation
+    assert w.category_credit <= one_exact + 1e-9
+
+
+def test_category_alone_does_not_unlock_the_sector_bonus() -> None:
+    """Sektör bonusu tam etiket eşleşmesi arıyor.
+
+    Kategori örtüşmesi zaten arz-talep bileşeninde kısmi puan alıyor; sektörü
+    de açmak zayıf bir sinyali iki kez saymak olurdu.
+    """
+    model = build_synergy_model(
+        build_input(
+            [
+                person(0, offers={1}, offer_categories={10}, sector=7),
+                person(1, seeks={2}, seek_categories={10}, sector=7),
+            ]
+        )
+    )
+    assert model.explain(0, 1)[SECTOR] == pytest.approx(0.0)
+
+
+def test_category_contribution_is_reported_separately() -> None:
+    """Katılımcıya gösterilecek cümle kaynağa göre değişiyor (M8)."""
+    category_only = build_synergy_model(
+        build_input(
+            [
+                person(0, offers={1}, offer_categories={10}),
+                person(1, seeks={2}, seek_categories={10}),
+            ]
+        )
+    ).explain(0, 1)
+    exact = build_synergy_model(
+        build_input(
+            [
+                person(0, offers={1}, offer_categories={10}),
+                person(1, seeks={1}, seek_categories={10}),
+            ]
+        )
+    ).explain(0, 1)
+
+    assert category_only[CATEGORY] > 0.0
+    assert category_only[SUPPLY_DEMAND] == pytest.approx(0.0)
+
+    assert exact[SUPPLY_DEMAND] > 0.0
+    assert exact[CATEGORY] == pytest.approx(0.0)
 
 
 # --- Arz-talep eşleşmesi ----------------------------------------------------
@@ -252,7 +397,14 @@ def test_explain_matches_the_matrix() -> None:
 def test_explain_reports_every_component() -> None:
     model = build_synergy_model(build_input([person(0, offers={1}), person(1, seeks={1})]))
     contributions = model.explain(0, 1)
-    assert set(contributions) == {SUPPLY_DEMAND, SECTOR, CITY, REQUEST, SIMILARITY_PENALTY}
+    assert set(contributions) == {
+        SUPPLY_DEMAND,
+        CATEGORY,
+        SECTOR,
+        CITY,
+        REQUEST,
+        SIMILARITY_PENALTY,
+    }
 
 
 def test_empty_participant_list_does_not_crash() -> None:

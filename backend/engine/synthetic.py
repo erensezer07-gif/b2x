@@ -55,6 +55,16 @@ class ScenarioSpec:
     # alanların dilimlerinden gelir. Alan sayısı azaldıkça eşleşme yoğunlaşır.
     theme_count: int = 5
 
+    # Etiket havuzunun kaç kategoriye bölündüğü.
+    #
+    # Gerçekte her etiket bir kategoriye ait (9 kategori × 8 etiket) ve motor
+    # tam eşleşme bulamadığında kategori düzeyinde kısmi puan veriyor (9.3).
+    # Burada kategori etiket kimliğinden türetiliyor: bitişik dilimler.
+    #
+    # İlgi alanından (theme) ayrı bir kavram: alan kimin neyi seçeceğini
+    # belirler, kategori seçilen etiketlerin hangi başlık altında toplandığını.
+    category_count: int = 6
+
     # 0.0 = kimse kimseye uymaz (sunulan ve aranan havuzları tamamen ayrık)
     # 1.0 = havuzlar aynı, eşleşme bol
     compatibility: float = 1.0
@@ -102,22 +112,31 @@ def _build_participants(spec: ScenarioSpec, rng: random.Random) -> tuple[Partici
         first = start + theme * theme_size
         return list(range(first, first + theme_size))
 
+    # Kategori etiket kimliğinden türetiliyor: bitişik dilimler. Gerçekte de
+    # her etiket tam olarak bir kategoriye ait.
+    category_size = max(1, spec.tag_count // max(1, spec.category_count))
+
+    def categories_of(tags: frozenset[int]) -> frozenset[int]:
+        return frozenset(tag // category_size for tag in tags)
+
     people = []
     for index in range(spec.participant_count):
         offer_theme = rng.randrange(theme_count)
         seek_theme = rng.randrange(theme_count)
         offer_pool = theme_tags(0, offer_theme)
         seek_pool = theme_tags(shift, seek_theme)
+
+        offered = frozenset(rng.sample(offer_pool, min(spec.offered_per_person, len(offer_pool))))
+        sought = frozenset(rng.sample(seek_pool, min(spec.sought_per_person, len(seek_pool))))
+
         people.append(
             Participant(
                 index=index,
                 company=rng.randrange(spec.company_count),
-                offered_tags=frozenset(
-                    rng.sample(offer_pool, min(spec.offered_per_person, len(offer_pool)))
-                ),
-                sought_tags=frozenset(
-                    rng.sample(seek_pool, min(spec.sought_per_person, len(seek_pool)))
-                ),
+                offered_tags=offered,
+                sought_tags=sought,
+                offered_categories=categories_of(offered),
+                sought_categories=categories_of(sought),
                 sector=rng.randrange(spec.sector_count) if spec.sector_count else None,
                 city=rng.randrange(spec.city_count) if spec.city_count else None,
             )

@@ -24,6 +24,7 @@ Bileşen anahtarları İngilizce; katılımcıya gösterilecek Türkçe cümlele
 arayüz katmanında üretilir (M8). Motor cümle kurmaz.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -38,28 +39,63 @@ CITY = "city"
 REQUEST = "request"
 SIMILARITY_PENALTY = "similarity_penalty"
 
+# Arz-talep puanının **yalnızca kategori örtüşmesi sayesinde** kazanılan kısmı.
+# Diğerleri gibi ağırlıklandırılmış bir katkıdır; `SUPPLY_DEMAND` ile toplamı
+# arz-talep bileşeninin tamamını verir. Ayrı tutuluyor çünkü katılımcıya
+# gösterilecek cümle değişiyor (M8): "Sen X sunuyorsun, o X arıyor" ile
+# "İkiniz de Y alanındasınız" aynı şey değil.
+CATEGORY = "category"
 
-def _tag_matrices(
+
+def _membership_matrices(
     participants: tuple[Participant, ...],
+    offered_of: Callable[[Participant], frozenset[int]],
+    sought_of: Callable[[Participant], frozenset[int]],
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Etiket kümelerini N×T boolean matrislere çevirir.
+    """Küme üyeliklerini N×K boolean matrislere çevirir.
 
-    Etiket kimlikleri sıralanarak sütuna yerleştirilir — küme gezinme sırası
-    çalışmadan çalışmaya değişmesin diye (5.3 determinizm).
+    Hem etiketler hem kategoriler için kullanılıyor; ikisi de aynı biçimde
+    "kim neyi sunuyor / arıyor" tablosu.
+
+    Kimlikler sıralanarak sütuna yerleştirilir — küme gezinme sırası çalışmadan
+    çalışmaya değişmesin diye (5.3 determinizm).
     """
-    tags = sorted(
-        {tag for person in participants for tag in (person.offered_tags | person.sought_tags)}
+    keys = sorted(
+        {key for person in participants for key in (offered_of(person) | sought_of(person))}
     )
-    column_of = {tag: column for column, tag in enumerate(tags)}
+    column_of = {key: column for column, key in enumerate(keys)}
 
-    offered = np.zeros((len(participants), len(tags)), dtype=np.float64)
-    sought = np.zeros((len(participants), len(tags)), dtype=np.float64)
+    offered = np.zeros((len(participants), len(keys)), dtype=np.float64)
+    sought = np.zeros((len(participants), len(keys)), dtype=np.float64)
     for person in participants:
-        for tag in person.offered_tags:
-            offered[person.index, column_of[tag]] = 1.0
-        for tag in person.sought_tags:
-            sought[person.index, column_of[tag]] = 1.0
+        for key in offered_of(person):
+            offered[person.index, column_of[key]] = 1.0
+        for key in sought_of(person):
+            sought[person.index, column_of[key]] = 1.0
     return offered, sought
+
+
+def _saturated(counts: np.ndarray, saturation: float) -> np.ndarray:
+    """Kesişim sayısını [0, 1] oranına çevirir; doyumun üstü ek puan getirmez."""
+    if saturation <= 0:
+        return np.zeros_like(counts)
+    return np.minimum(counts, saturation) / saturation
+
+
+def _supply_demand_ratio(
+    exact: np.ndarray, category: np.ndarray, weights: SynergyWeights
+) -> np.ndarray:
+    """Tek yönün arz-talep oranı: tam etiket ve kategori birlikte.
+
+    `max`, toplam değil — tam eşleşme kategoriyi gölgeler (9.3). Toplasaydık
+    etiketi tutan ikili bir de kategoriden puan alır ve doyum anlamını
+    yitirirdi.
+    """
+    exact_ratio = _saturated(exact, float(weights.supply_demand_saturation))
+    if weights.category_credit <= 0.0:
+        return exact_ratio
+    category_ratio = _saturated(category, float(weights.category_saturation))
+    return np.maximum(exact_ratio, weights.category_credit * category_ratio)
 
 
 def _attribute_vector(values: list[int | None]) -> np.ndarray:
@@ -119,15 +155,29 @@ class SynergyModel:
 
         forward = len(a.offered_tags & b.sought_tags)
         backward = len(b.offered_tags & a.sought_tags)
-        saturation = w.supply_demand_saturation
-        forward_ratio = min(forward, saturation) / saturation
-        backward_ratio = min(backward, saturation) / saturation
-        bonus = w.mutual_supply_demand_bonus
-        supply_demand = min(
-            (forward_ratio + backward_ratio) / 2.0 + bonus * min(forward_ratio, backward_ratio),
-            1.0,
-        )
+        forward_category = len(a.offered_categories & b.sought_categories)
+        backward_category = len(b.offered_categories & a.sought_categories)
 
+        # Aynı hesap iki kez: biri kategori kredisiyle, biri kategorisiz.
+        # Farkları "kategori sayesinde kazanılan puan" oluyor ve ayrı bir
+        # kalem olarak raporlanıyor. İkisinin toplamı arz-talep bileşeninin
+        # tamamına eşit — kırılımın toplamı skoru vermeli.
+        supply_demand = _combine_directions(
+            _pair_supply_demand_ratio(forward, forward_category, w),
+            _pair_supply_demand_ratio(backward, backward_category, w),
+            w,
+        )
+        exact_only = _combine_directions(
+            _pair_supply_demand_ratio(forward, 0, w),
+            _pair_supply_demand_ratio(backward, 0, w),
+            w,
+        )
+        from_category = max(supply_demand - exact_only, 0.0)
+
+        # Sektör bonusu **tam** etiket eşleşmesi arıyor, kategori yetmiyor.
+        # 9.3 "biri sunup diğeri arıyorsa değerli" diyor; kategori düzeyindeki
+        # örtüşme bunun zayıf hâli ve zaten arz-talep bileşeninde kısmi puan
+        # alıyor. İkisini birden vermek zayıf bir sinyali iki kez saymak olurdu.
         complementary = forward > 0 or backward > 0
         same_sector = a.sector is not None and a.sector == b.sector
         sector = 1.0 if (same_sector and complementary) else 0.0
@@ -137,7 +187,8 @@ class SynergyModel:
 
         total_weight = w.base_weight_total
         contributions = {
-            SUPPLY_DEMAND: w.supply_demand * supply_demand / total_weight,
+            SUPPLY_DEMAND: w.supply_demand * exact_only / total_weight,
+            CATEGORY: w.supply_demand * from_category / total_weight,
             SECTOR: w.sector * sector / total_weight,
             CITY: w.city * city / total_weight,
         }
@@ -158,6 +209,35 @@ class SynergyModel:
         contributions[SIMILARITY_PENALTY] = -w.similarity_penalty * _penalty_ratio(similarity, w)
 
         return contributions
+
+
+def _combine_directions(forward: float, backward: float, weights: SynergyWeights) -> float:
+    """İki yönün oranını arz-talep bileşenine indirger (9.3).
+
+    `min(ileri, geri)` yalnızca iki yön de doluyken sıfırdan farklı; çift yönlü
+    eşleşme bu sayede tek yönlüden belirgin şekilde öne çıkıyor.
+    """
+    bonus = weights.mutual_supply_demand_bonus
+    return min((forward + backward) / 2.0 + bonus * min(forward, backward), 1.0)
+
+
+def _pair_supply_demand_ratio(exact: int, category: int, weights: SynergyWeights) -> float:
+    """`_supply_demand_ratio`'nun tek ikili için skaler karşılığı.
+
+    İki hesabın ayrışması sessiz bir hata olurdu: matris skoru verir, `explain()`
+    gerekçeyi verir; ayrışırlarsa katılımcıya skoruyla uyuşmayan bir gerekçe
+    gösterilir. Bir test ikisinin aynı sonucu ürettiğini kilitliyor.
+    """
+    saturation = weights.supply_demand_saturation
+    exact_ratio = min(exact, saturation) / saturation if saturation > 0 else 0.0
+    if weights.category_credit <= 0.0:
+        return exact_ratio
+
+    category_saturation = weights.category_saturation
+    category_ratio = (
+        min(category, category_saturation) / category_saturation if category_saturation > 0 else 0.0
+    )
+    return max(exact_ratio, weights.category_credit * category_ratio)
 
 
 def _set_jaccard(first: frozenset[int], second: frozenset[int]) -> float:
@@ -189,15 +269,26 @@ def build_synergy_model(engine_input: EngineInput) -> SynergyModel:
             weights=weights,
         )
 
-    offered, sought = _tag_matrices(participants)
+    offered, sought = _membership_matrices(
+        participants,
+        lambda person: person.offered_tags,
+        lambda person: person.sought_tags,
+    )
+    offered_category, sought_category = _membership_matrices(
+        participants,
+        lambda person: person.offered_categories,
+        lambda person: person.sought_categories,
+    )
 
     # Arz-talep: ileri[a, b] = a'nın sunduğu ile b'nin aradığının kesişim sayısı.
     forward = offered @ sought.T
     backward = forward.T
 
-    saturation = float(weights.supply_demand_saturation)
-    forward_ratio = np.minimum(forward, saturation) / saturation
-    backward_ratio = np.minimum(backward, saturation) / saturation
+    forward_category = offered_category @ sought_category.T
+    backward_category = forward_category.T
+
+    forward_ratio = _supply_demand_ratio(forward, forward_category, weights)
+    backward_ratio = _supply_demand_ratio(backward, backward_category, weights)
 
     # `min` yalnızca iki yön de doluyken sıfırdan farklıdır; çift yönlü eşleşme
     # bu sayede tek yönlüden belirgin şekilde öne çıkar (9.3).
