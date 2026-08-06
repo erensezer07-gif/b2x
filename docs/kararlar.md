@@ -1258,3 +1258,73 @@ turunda masaya oturmamış kişiler.
 Plan araması dört uçta daha tekrar edecekti. Başka bir etkinliğin planı da
 `404`'e düşüyor: kimlik tarayarak hangi planların var olduğu öğrenilememeli
 (Bölüm 7'nin `get_owned_event`'teki gerekçesiyle aynı).
+
+## Aşama 8 — Plan önizleme ve düzeltme (Tur 2: istemci)
+
+### Plan önizleme ayrı bir ekran
+
+Eşleştirme ekranı çalıştırmayı ve versiyon geçmişini gösteriyor; önizleme
+defalarca açılıp kapanan, derin bağlantı verilebilmesi gereken bir yer. Aynı
+ekrana sığdırmak ikisini de kalabalıklaştırırdı.
+`/etkinlikler/{id}/plan/{planId}` yolu geçmişteki bir versiyonu da açıyor.
+
+### Takas dokun-dokun, sürükle-bırak değil
+
+M7 bunu zaten söylüyor; uygularken sebebi netleşti: masa listesi dikey
+kayıyor, sürükleme kaydırmayla çakışıyor ve mobilde yanlış hedefe bırakmak
+çok kolay. İki dokunuş aynı işi görüyor, üstelik "Vazgeç" ile iptal
+edilebiliyor.
+
+Seçim görünmez bir durum olamaz: bir kişiye dokunulunca üstteki şerit kimin
+seçildiğini ve sıradaki adımı yazıyor. Aynı kişiye tekrar dokunmak seçimi
+bırakıyor — yanlışlıkla başlayan bir takas çıkmaz sokak olmamalı.
+
+### Görünüm uçtan dönüyor, sağlayıcıdan değil
+
+Takas ve sabitleme uçları güncel slot görünümünü yanıtın içinde veriyor.
+Ekran onu doğrudan gösteriyor; sağlayıcının yeniden yüklemesini bekleseydi
+liste bir an eski hâline döner ve seçim kaybolurdu. Sağlayıcı yine de
+tazeleniyor: tura geri dönüldüğünde taze veri bulunmalı.
+
+### Uyarı ile ret ayrı şeritlerde
+
+Uyarıda takas **oldu**, rette olmadı. İkisini aynı kutuya koymak organizatörü
+yanıltırdı: "aynı şirketten iki kişi" uyarısını görüp yerin değişmediğini
+sanabilirdi. Uyarı şeridi "Takas yapıldı, ama dikkat" diye başlıyor, ret
+şeridi kırmızı ve sebebi yazıyor.
+
+### Cümleler masa numarasına ek getirmiyor
+
+İlk yazımda "Masa 3'te", "Masa 3'ün" gibi ekler vardı. Türkçede ek sayının
+**okunuşuna** göre değişiyor: 1'in, 2'nin, 3'ün, 4'te, 6'da, 9'un... Tarayıcıda
+"Masa 2'ın" ve "Masa 4'da" çıktı.
+
+Ek tablosu yazmak yerine cümleler ek gerektirmeyecek şekilde kuruldu:
+*"Masa 3 — tek kişi kaldı: ..."*. Karar `plan_test.dart` içinde bir testle
+tutuluyor: hiçbir uyarı cümlesi rakamdan sonra kesme işareti içermiyor.
+
+"2. turda" sorun değil — ek sayıya değil "tur" kelimesine geliyor.
+
+### Tek kişilik masanın rozeti "Boş" değil
+
+Sunucu tek kişilik masaya kalite vermiyor (skor en zayıf ikili bağ, tek kişide
+bağ yok). İstemci bunu doğrudan "Boş" diye yazınca masada bir kişi görünürken
+rozet "Boş" diyordu. Tarayıcıda yakalandı.
+
+Rozet artık "Tek kişi" yazıyor ve **kusur rengiyle** çiziliyor: tek kişilik
+masa 9.5'in kesin kuralını çiğniyor, nötr gri bunu hafife alırdı.
+
+### Kalite renkleri temada
+
+Üç seviyenin rengi `AppQualityColors` içinde, temanın kendi renklerinden
+türetiliyor. Ekranda renk seçilmiyor (Bölüm 0). Görsel kimlik kararı
+geldiğinde rozet de tek dosyadan değişecek.
+
+### Yayınlama alt çubukta, onay diyaloğuyla
+
+Geri alınamaz bir adım değil — ama katılımcılar anında görmeye başlıyor, bu
+yüzden soruluyor. Diyalog ne olacağını yazıyor: katılımcılar masalarını
+görecek, varsa önceki plan arşive geçecek, düzeltme yine mümkün.
+
+Alt çubuk planın durumunu da söylüyor: *"Plan taslak. Katılımcılar henüz
+hiçbir şey göremiyor."* / *"Katılımcılar bu planı görüyor."*

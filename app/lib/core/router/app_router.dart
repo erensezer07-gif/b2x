@@ -7,6 +7,7 @@ import '../../features/auth/register_screen.dart';
 import '../../features/events/event_list_screen.dart';
 import '../../features/events/layout/layout_editor_screen.dart';
 import '../../features/events/matching_screen.dart';
+import '../../features/events/plan_screen.dart';
 import '../../features/events/public_event_screen.dart';
 import '../../features/events/registrations_screen.dart';
 import '../../features/events/wizard/event_wizard_screen.dart';
@@ -106,6 +107,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: MatchingScreen.routeName,
         builder: (context, state) => MatchingScreen(
           eventId: int.parse(state.pathParameters['eventId']!),
+        ),
+      ),
+      // Plan önizleme ve elle düzeltme (M7). Eşleştirme ekranından ayrı: bu
+      // ekran defalarca açılıp kapanıyor ve derin bağlantı verilebilmeli.
+      GoRoute(
+        path: PlanScreen.routePath,
+        name: PlanScreen.routeName,
+        builder: (context, state) => PlanScreen(
+          eventId: int.parse(state.pathParameters['eventId']!),
+          planId: int.parse(state.pathParameters['planId']!),
         ),
       ),
       // Katılımcının gördüğü etkinlik detayı. Yolu `/etkinlikler` altında

@@ -8,6 +8,7 @@ import '../../core/widgets/state_views.dart';
 import 'event_controller.dart';
 import 'event_list_screen.dart';
 import 'models.dart';
+import 'plan_screen.dart';
 import 'schedule.dart';
 
 /// Eşleştirmeyi çalıştırma ekranı (şartname M6, 5.4).
@@ -16,8 +17,8 @@ import 'schedule.dart';
 /// Basınca iş kuyruğa girer, ekranda durum gösterilir. Bittiğinde plan
 /// önizlemesi açılır."*
 ///
-/// Plan önizlemesi ve elle düzeltme **Aşama 8'in konusu**; bu ekran özeti
-/// gösterip orada bırakıyor.
+/// Önizlemenin kendisi `PlanScreen`'de (M7); burası çalıştırma ve versiyon
+/// listesi.
 class MatchingScreen extends ConsumerStatefulWidget {
   const MatchingScreen({super.key, required this.eventId});
 
@@ -75,6 +76,16 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
         });
       }
     }
+  }
+
+  void _openPlan(int planId) {
+    context.goNamed(
+      PlanScreen.routeName,
+      pathParameters: {
+        'eventId': '${widget.eventId}',
+        'planId': '$planId',
+      },
+    );
   }
 
   @override
@@ -142,13 +153,17 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
           ],
           if (current != null) ...[
             const SizedBox(height: AppSpacing.lg),
-            _PlanCard(plan: current),
+            _PlanCard(plan: current, onOpen: () => _openPlan(current.id)),
           ],
           if (history.length > 1) ...[
             const SizedBox(height: AppSpacing.lg),
             Text('Önceki çalıştırmalar', style: theme.textTheme.titleSmall),
             const SizedBox(height: AppSpacing.sm),
-            for (final plan in history.skip(1)) _HistoryRow(plan: plan),
+            for (final plan in history.skip(1))
+              _HistoryRow(
+                plan: plan,
+                onOpen: plan.hasResult ? () => _openPlan(plan.id) : null,
+              ),
           ],
         ],
       ),
@@ -297,9 +312,10 @@ class _RunButton extends StatelessWidget {
 
 /// Çalışan veya bitmiş planın durumu ve özeti.
 class _PlanCard extends StatelessWidget {
-  const _PlanCard({required this.plan});
+  const _PlanCard({required this.plan, required this.onOpen});
 
   final PlanSummary plan;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -320,7 +336,10 @@ class _PlanCard extends StatelessWidget {
       JobStatus.done => (
           Icons.check_circle_outline,
           colors.primary,
-          'Plan hazır ve taslak olarak kaydedildi. Katılımcılar henüz göremiyor.',
+          plan.isPublished
+              ? 'Plan yayında. Katılımcılar kendi masalarını görüyor.'
+              : 'Plan hazır ve taslak olarak kaydedildi. Katılımcılar henüz '
+                  'göremiyor.',
         ),
       JobStatus.failed => (
           Icons.error_outline,
@@ -366,6 +385,12 @@ class _PlanCard extends StatelessWidget {
             if (plan.hasResult) ...[
               const Divider(height: AppSpacing.lg),
               _Summary(plan: plan),
+              const SizedBox(height: AppSpacing.md),
+              FilledButton.icon(
+                onPressed: onOpen,
+                icon: const Icon(Icons.grid_view_outlined),
+                label: const Text('Planı incele ve düzelt'),
+              ),
             ],
           ],
         ),
@@ -397,6 +422,8 @@ class _Summary extends StatelessWidget {
             : plan.averageTableScore!.toStringAsFixed(2),
       ),
       ('Hesaplama süresi', '${plan.runtimeMs ?? 0} ms'),
+      if (plan.unmatched.isNotEmpty)
+        ('Hiç eşleşmeyen', '${plan.unmatched.length} kişi'),
     ];
 
     return Column(
@@ -417,46 +444,56 @@ class _Summary extends StatelessWidget {
               ],
             ),
           ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          'Planı inceleyip düzeltmek sonraki aşamada gelecek.',
-          style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-        ),
       ],
     );
   }
 }
 
 class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({required this.plan});
+  const _HistoryRow({required this.plan, required this.onOpen});
 
   final PlanSummary plan;
+
+  /// Hesabı bitmemiş plan açılamaz — gösterilecek bir şey yok.
+  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Versiyon ${plan.version} · ${formatDate(plan.createdAt)} '
-              '${formatTime(plan.createdAt)}',
-              style: theme.textTheme.bodyMedium,
+    return InkWell(
+      onTap: onOpen,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Versiyon ${plan.version} · ${formatDate(plan.createdAt)} '
+                '${formatTime(plan.createdAt)}',
+                style: theme.textTheme.bodyMedium,
+              ),
             ),
-          ),
-          Text(
-            plan.jobStatus == JobStatus.done
-                ? '${plan.totalMeetings ?? 0} görüşme'
-                : plan.jobStatus.label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colors.onSurfaceVariant,
+            if (plan.status != PlanStatus.draft) ...[
+              Text(
+                plan.status.label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: plan.isPublished ? colors.primary : colors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+            ],
+            Text(
+              plan.jobStatus == JobStatus.done
+                  ? '${plan.totalMeetings ?? 0} görüşme'
+                  : plan.jobStatus.label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

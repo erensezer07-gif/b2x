@@ -90,6 +90,57 @@ final eventPlansProvider =
   return ref.watch(eventRepositoryProvider).loadPlans(eventId);
 });
 
+/// Tek bir plan versiyonu — önizleme ekranının özet paneli (M7).
+final planProvider =
+    FutureProvider.family<PlanSummary, PlanQuery>((ref, query) {
+  return ref.watch(eventRepositoryProvider).loadPlan(query.eventId, query.planId);
+});
+
+/// Bir turun masaları ve oturanları (M7).
+final planSlotProvider =
+    FutureProvider.family<SlotView, SlotQuery>((ref, query) {
+  return ref
+      .watch(eventRepositoryProvider)
+      .loadSlot(query.eventId, query.planId, query.slotNumber);
+});
+
+/// Plan sağlayıcısının argümanı.
+///
+/// `family` argümanı olduğu için değer eşitliği şart: aynı plan aynı önbelleğe
+/// düşmeli, her yeniden çizimde yeni istek atılmamalı.
+class PlanQuery {
+  const PlanQuery(this.eventId, this.planId);
+
+  final int eventId;
+  final int planId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlanQuery && other.eventId == eventId && other.planId == planId;
+
+  @override
+  int get hashCode => Object.hash(eventId, planId);
+}
+
+/// Slot sağlayıcısının argümanı.
+class SlotQuery {
+  const SlotQuery(this.eventId, this.planId, this.slotNumber);
+
+  final int eventId;
+  final int planId;
+  final int slotNumber;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SlotQuery &&
+      other.eventId == eventId &&
+      other.planId == planId &&
+      other.slotNumber == slotNumber;
+
+  @override
+  int get hashCode => Object.hash(eventId, planId, slotNumber);
+}
+
 /// Etkinliği değiştiren işlemler.
 ///
 /// Depoyu sarmalayıp değişiklikten sonra ilgili sağlayıcıları tazeliyor.
@@ -342,4 +393,72 @@ class MatchingActions {
 final matchingActionsProvider =
     Provider.family<MatchingActions, int>((ref, eventId) {
   return MatchingActions(ref, eventId);
+});
+
+/// Planı elle düzelten işlemler (M7).
+///
+/// Takas ve sabitleme güncel slot görünümünü **geri döndürüyor**; ekran onu
+/// doğrudan kullanıyor, sağlayıcıyı tazeleyip yeniden istek atmıyor. Takas
+/// sırasında listenin bir an eski hâline dönmesi seçimi kaybettirirdi.
+///
+/// Sağlayıcı yine de tazeleniyor: kullanıcı tura geri döndüğünde taze veri
+/// bulmalı.
+class PlanEditActions {
+  const PlanEditActions(this._ref, this.eventId, this.planId);
+
+  final Ref _ref;
+  final int eventId;
+  final int planId;
+
+  EventRepository get _repository => _ref.read(eventRepositoryProvider);
+
+  Future<SwapResult> swap({
+    required int slotNumber,
+    required int assignmentId,
+    int? targetAssignmentId,
+    int? targetTableId,
+  }) async {
+    final result = await _repository.swap(
+      eventId: eventId,
+      planId: planId,
+      slotNumber: slotNumber,
+      assignmentId: assignmentId,
+      targetAssignmentId: targetAssignmentId,
+      targetTableId: targetTableId,
+    );
+    _ref.invalidate(planSlotProvider(SlotQuery(eventId, planId, slotNumber)));
+    return result;
+  }
+
+  Future<SlotView> setPinned({
+    required int slotNumber,
+    required int assignmentId,
+    required bool isPinned,
+  }) async {
+    final slot = await _repository.setPinned(
+      eventId: eventId,
+      planId: planId,
+      assignmentId: assignmentId,
+      isPinned: isPinned,
+    );
+    _ref.invalidate(planSlotProvider(SlotQuery(eventId, planId, slotNumber)));
+    return slot;
+  }
+
+  /// Planı yayına alır.
+  ///
+  /// Etkinliğin bütün planları tazeleniyor: önceki yayındaki plan arşive
+  /// geçtiği için liste de değişti.
+  Future<PlanSummary> publish() async {
+    final plan = await _repository.publishPlan(eventId, planId);
+    _ref.invalidate(planProvider(PlanQuery(eventId, planId)));
+    _ref.invalidate(eventPlansProvider(eventId));
+    await _ref.read(planProvider(PlanQuery(eventId, planId)).future);
+    return plan;
+  }
+}
+
+final planEditActionsProvider =
+    Provider.family<PlanEditActions, PlanQuery>((ref, query) {
+  return PlanEditActions(ref, query.eventId, query.planId);
 });

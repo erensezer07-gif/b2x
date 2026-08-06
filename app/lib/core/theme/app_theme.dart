@@ -45,6 +45,38 @@ class AppTheme {
   }
 }
 
+/// Masa kalite rozetinin renkleri (şartname M7).
+///
+/// *"Sayı değil, üç seviye."* Üçü de temanın kendi renklerinden türetiliyor;
+/// ekranda renk seçilmiyor. Görsel kimlik kararı geldiğinde rozet de bu
+/// dosyadan değişecek.
+class AppQualityColors {
+  const AppQualityColors({
+    required this.good,
+    required this.fair,
+    required this.weak,
+    required this.empty,
+  });
+
+  factory AppQualityColors.of(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AppQualityColors(
+      good: colors.primary,
+      fair: colors.tertiary,
+      // Hata rengi bilinçli: zayıf masa bir kusur, dikkat çekmeli.
+      weak: colors.error,
+      empty: colors.outline,
+    );
+  }
+
+  final Color good;
+  final Color fair;
+  final Color weak;
+
+  /// Boş masa bir kalite seviyesi değil; nötr duruyor.
+  final Color empty;
+}
+
 /// Aralık ölçeği.
 ///
 /// Ekranlarda çıplak sayı yazılmaz: `AppSpacing.md` yazmak, `16` yazmaktan hem

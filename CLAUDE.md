@@ -110,7 +110,17 @@ Gerçek veriyle doğrulandı (24 katılımcı / 8 şirket / 6 masa / 5 tur): kuy
 
 Tarayıcıda doğrulandı: kontrol listesi ve Türkçe uyarı → çalıştır → "Kuyrukta" → "Bitti" + özet → ikinci çalıştırma versiyon 2 ve geçmiş. Aynı tohum iki kez aynı sonucu verdi (5.3).
 
-**Sıradaki: Aşama 8 — Plan önizleme ve düzeltme.** Slot görünümü, takas, kural uyarıları, sabitleme, yayınlama.
+**Aşama 8 bitti — plan önizleme ve elle düzeltme.**
+
+*Backend:* Slot görünümü (boş masalar dahil), üç seviyeli masa kalitesi, takas ve boş yere taşıma, sabitleme, yayınlama. Kural kontrolleri takastan sonra çalışıyor ve takası **engellemiyor** (M7); reddedilen tek durum sabitlenmiş atama. Takas yeni ikililer ürettiği için sinerji modeli yeniden kurulup `match_reasons` tazeleniyor. 311 test.
+
+*İstemci:* Plan önizleme ekranı, tur seçici, kalite rozetleri, dokun-dokun takas, uyarı ve ret şeritleri, özet paneli, yayınlama onayı. 108 test.
+
+Uyarılar bağımsız bir gözle sınanıyor: her takastan sonra plan `engine/rules.py`'deki `find_violations`'tan geçiyor ve orada bulunan her ihlal türünün uçtan da uyarı olarak döndüğü doğrulanıyor.
+
+Tarayıcıda doğrulandı (10 katılımcı / 5 masa × 3 sandalye / 4 tur): dört tur gezildi → takas → dört uyarı türü Türkçe → boş masaya taşıma → sabitleme → sabitlenmişi taşımada kırmızı ret şeridi → yayınla → "Yayında". İki dil hatası tarayıcıda yakalandı ve düzeltildi (aşağıdaki tuzaklar).
+
+**Sıradaki: Aşama 9 — Katılımcı deneyimi.** Katılımcının kendi programı, masa arkadaşları, eşleşme gerekçesi.
 
 ### API uçları
 
@@ -142,6 +152,11 @@ POST   /events/{id}/registrations/{rid}/reject
 
 GET  /events/{id}/matching-check
 POST /events/{id}/plans      GET /events/{id}/plans      GET /events/{id}/plans/{pid}
+
+GET   /events/{id}/plans/{pid}/slots/{slot}
+POST  /events/{id}/plans/{pid}/swap
+PATCH /events/{id}/plans/{pid}/assignments/{aid}
+POST  /events/{id}/plans/{pid}/publish
 ```
 
 Çıkış ucu yok: jetonlar durumsuz, çıkış istemcide jetonu silmekle olur.
@@ -251,3 +266,13 @@ curl http://localhost:8000/health/ready   db ve redis'e erişiliyor mu
 **Panelde otomatik kaydetme birikimli olmalı.** `layout_sheets.dart` içindeki `_DebouncedSaver` bekleyen değişiklikleri bir sözlükte topluyor. Tek bir gönderim tutulursa arka arkaya değiştirilen iki alandan ilki sessizce kaybolur — tam olarak böyle oldu, ayrıntı `docs/kararlar.md`'de.
 
 **Görünmeyen ilerleme göstergesi bırakma.** Saydamlığı sıfırlanmış `CircularProgressIndicator` tik atmaya devam eder ve `pumpAndSettle` hiç durulmaz; gösterge yalnızca gerektiğinde kurulmalı.
+
+**Türkçe cümlede sayıya ek getirme.** Ek sayının **okunuşuna** göre değişiyor: 1'in ama 2'nin, 3'ün, 4'te, 6'da, 9'un. Arayüzde "Masa 2'ın" ve "Masa 4'da" çıktı. Cümle ek gerektirmeyecek şekilde kurulur — *"Masa 3 — tek kişi kaldı: ..."*. `plan_test.dart` içinde bir test bunu tutuyor.
+
+**Tek kişilik masaya "Boş" yazma.** Sunucu ona kalite vermiyor (skor en zayıf ikili bağ, tek kişide bağ yok) ve `TableQuality.empty` dönüyor. İstemci bunu doğrudan etikete çevirince masada biri otururken rozet "Boş" diyordu. `QualityBadge` doluluğa da bakıyor.
+
+**Takas uçları görünümü geri döndürüyor, ekran onu kullanmalı.** Sağlayıcının yeniden yüklemesini beklemek listeyi bir an eski hâline döndürür ve seçimi kaybettirir. `plan_screen.dart` yanıttaki görünümü tutuyor, sağlayıcıyı ayrıca tazeliyor.
+
+**Kural ihlali takası engellemez.** M7 açıkça *"organizatör uyarıya rağmen devam edebilir"* diyor. `apply_swap` yalnızca sabitlenmiş atamayı reddediyor (409); kalan her şey `200` gövdesinde uyarı olarak dönüyor. Uyarı şeridi ile ret şeridi ayrı — biri "oldu ama dikkat", diğeri "olmadı".
+
+**Takastan sonra `match_reasons` tazelenmeli.** Takas daha önce yan yana gelmemiş ikililer üretiyor; satırlar yazılmazsa masa skoru yanlış çıkar ve Aşama 9'da katılımcıya olmayan bir gerekçe gösterilir. `_recompute_reasons` sinerji modelini yeniden kuruyor (200 kişi için ~10 ms).

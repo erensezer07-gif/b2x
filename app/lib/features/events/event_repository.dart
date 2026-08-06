@@ -301,4 +301,60 @@ class EventRepository {
       await _api.getObject('/events/$eventId/plans/$planId'),
     );
   }
+
+  // --- Plan önizleme ve elle düzeltme (M7) -----------------------------------
+
+  /// Bir turun masaları ve oturanları. Boş masalar da geliyor.
+  Future<SlotView> loadSlot(int eventId, int planId, int slotNumber) async {
+    return SlotView.fromJson(
+      await _api.getObject('/events/$eventId/plans/$planId/slots/$slotNumber'),
+    );
+  }
+
+  /// İki kişinin yerini değiştirir ya da birini boş yere taşır.
+  ///
+  /// Hedef olarak ya bir kişi ya bir masa verilir; ikisi birden geçersiz.
+  /// Kural ihlalleri **uyarı** olarak dönüyor, takası engellemiyor (M7).
+  Future<SwapResult> swap({
+    required int eventId,
+    required int planId,
+    required int slotNumber,
+    required int assignmentId,
+    int? targetAssignmentId,
+    int? targetTableId,
+  }) async {
+    return SwapResult.fromJson(
+      await _api.post(
+        '/events/$eventId/plans/$planId/swap',
+        body: {
+          'slot_number': slotNumber,
+          'assignment_id': assignmentId,
+          'target_assignment_id': ?targetAssignmentId,
+          'target_table_id': ?targetTableId,
+        },
+      ),
+    );
+  }
+
+  /// Atamayı sabitler veya çözer; güncel slot görünümünü döner.
+  Future<SlotView> setPinned({
+    required int eventId,
+    required int planId,
+    required int assignmentId,
+    required bool isPinned,
+  }) async {
+    return SlotView.fromJson(
+      await _api.patch(
+        '/events/$eventId/plans/$planId/assignments/$assignmentId',
+        body: {'is_pinned': isPinned},
+      ),
+    );
+  }
+
+  /// Planı yayına alır; varsa önceki yayındaki plan arşive geçer.
+  Future<PlanSummary> publishPlan(int eventId, int planId) async {
+    return PlanSummary.fromJson(
+      await _api.post('/events/$eventId/plans/$planId/publish'),
+    );
+  }
 }

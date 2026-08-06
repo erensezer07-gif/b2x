@@ -29,15 +29,17 @@ Map<String, dynamic> planJson({
   String jobStatus = 'done',
   String? jobError,
   bool withSummary = true,
+  String status = 'draft',
+  List<String> unmatched = const [],
 }) {
   return {
     'id': 3,
     'version': 2,
-    'status': 'draft',
+    'status': status,
     'job_status': jobStatus,
     'job_error': jobError,
     'created_at': '2026-08-06T14:30:00Z',
-    'published_at': null,
+    'published_at': status == 'published' ? '2026-08-06T15:00:00Z' : null,
     'seed': 42,
     'total_meetings': withSummary ? 96 : null,
     'min_meetings_per_person': withSummary ? 4 : null,
@@ -45,6 +47,9 @@ Map<String, dynamic> planJson({
     'runtime_ms': withSummary ? 3286 : null,
     'assignment_count': withSummary ? 96 : 0,
     'participant_count': withSummary ? 24 : 0,
+    'unmatched': unmatched,
+    'satisfied_requests': 0,
+    'total_requests': 0,
   };
 }
 
@@ -138,7 +143,25 @@ void main() {
       expect(plan.minMeetingsPerPerson, 4);
       expect(plan.participantCount, 24);
       // Hesap bitse de plan taslak kalıyor (5.2).
-      expect(plan.status, 'draft');
+      expect(plan.status, PlanStatus.draft);
+      expect(plan.isPublished, isFalse);
+    });
+
+    test('yayındaki plan yayın zamanını taşıyor', () {
+      final plan = PlanSummary.fromJson(planJson(status: 'published'));
+
+      expect(plan.status, PlanStatus.published);
+      expect(plan.isPublished, isTrue);
+      expect(plan.publishedAt, isNotNull);
+    });
+
+    test('hiç eşleşmeyenler isimle geliyor', () {
+      // M7 *"varsa kimler"* diyor: sayı organizatöre bir şey vermez.
+      final plan = PlanSummary.fromJson(
+        planJson(unmatched: ['Ayşe Yılmaz', 'Mehmet Demir']),
+      );
+
+      expect(plan.unmatched, ['Ayşe Yılmaz', 'Mehmet Demir']);
     });
 
     test('kuyruktaki planın özeti henüz boş', () {

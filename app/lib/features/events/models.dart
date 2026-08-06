@@ -439,6 +439,26 @@ class MatchingCheck {
   final bool canRun;
 }
 
+/// Planın kendi durumu (Bölüm 5.2).
+///
+/// **Hesabın durumundan ayrı.** `JobStatus` motorun nerede olduğunu, bu ise
+/// planın yayında olup olmadığını anlatır.
+enum PlanStatus {
+  draft('draft', 'Taslak'),
+  published('published', 'Yayında'),
+  archived('archived', 'Arşiv');
+
+  const PlanStatus(this.key, this.label);
+
+  final String key;
+  final String label;
+
+  static PlanStatus fromKey(String key) => PlanStatus.values.firstWhere(
+        (item) => item.key == key,
+        orElse: () => PlanStatus.draft,
+      );
+}
+
 /// Bir plan versiyonu ve hesabının durumu.
 class PlanSummary {
   const PlanSummary({
@@ -450,6 +470,9 @@ class PlanSummary {
     required this.seed,
     required this.assignmentCount,
     required this.participantCount,
+    required this.unmatched,
+    required this.satisfiedRequests,
+    required this.totalRequests,
     this.jobError,
     this.publishedAt,
     this.totalMeetings,
@@ -461,7 +484,7 @@ class PlanSummary {
   factory PlanSummary.fromJson(Map<String, dynamic> json) => PlanSummary(
         id: json['id'] as int,
         version: json['version'] as int,
-        status: json['status'] as String,
+        status: PlanStatus.fromKey(json['status'] as String),
         jobStatus: JobStatus.fromKey(json['job_status'] as String),
         jobError: json['job_error'] as String?,
         createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
@@ -475,13 +498,16 @@ class PlanSummary {
         runtimeMs: json['runtime_ms'] as int?,
         assignmentCount: json['assignment_count'] as int,
         participantCount: json['participant_count'] as int,
+        unmatched: (json['unmatched'] as List<dynamic>)
+            .map((item) => item as String)
+            .toList(),
+        satisfiedRequests: json['satisfied_requests'] as int,
+        totalRequests: json['total_requests'] as int,
       );
 
   final int id;
   final int version;
-
-  /// Planın kendi durumu: taslak / yayında / arşiv. Aşama 8'in konusu.
-  final String status;
+  final PlanStatus status;
 
   final JobStatus jobStatus;
   final String? jobError;
@@ -498,8 +524,208 @@ class PlanSummary {
   final int assignmentCount;
   final int participantCount;
 
+  /// *"Hiç eşleşmemiş kişi var mı, varsa kimler."* (M7)
+  ///
+  /// Sayı değil isim: organizatör bunları görüp elle yerleştirebilmeli.
+  final List<String> unmatched;
+
+  /// *"Karşılanan talep sayısı / toplam talep."* (M7)
+  final int satisfiedRequests;
+  final int totalRequests;
+
   bool get isPending => jobStatus.isPending;
   bool get hasResult => jobStatus == JobStatus.done;
+  bool get isPublished => status == PlanStatus.published;
+}
+
+// --- Plan önizleme ve elle düzeltme (M7) -------------------------------------
+
+/// Masa kalite göstergesi (M7).
+///
+/// *"Sayı değil, üç seviye."* Sınırlar sunucuda ve **mutlak**: aynı renk her
+/// zaman aynı şeyi anlatıyor, kötü bir planda "iyi" masa çıkmıyor. Skor da
+/// dönüyor ama organizatöre gösterilmiyor.
+enum TableQuality {
+  empty('empty', 'Boş'),
+  weak('weak', 'Zayıf'),
+  fair('fair', 'Orta'),
+  good('good', 'İyi');
+
+  const TableQuality(this.key, this.label);
+
+  final String key;
+  final String label;
+
+  static TableQuality fromKey(String key) => TableQuality.values.firstWhere(
+        (item) => item.key == key,
+        orElse: () => TableQuality.empty,
+      );
+}
+
+/// Bir masada oturan kişi (M7: *"ad, şirket"*).
+class SeatedPerson {
+  const SeatedPerson({
+    required this.assignmentId,
+    required this.registrationId,
+    required this.isPinned,
+    this.fullName,
+    this.company,
+  });
+
+  factory SeatedPerson.fromJson(Map<String, dynamic> json) => SeatedPerson(
+        assignmentId: json['assignment_id'] as int,
+        registrationId: json['registration_id'] as int,
+        isPinned: json['is_pinned'] as bool,
+        fullName: json['full_name'] as String?,
+        company: json['company'] as String?,
+      );
+
+  final int assignmentId;
+  final int registrationId;
+
+  /// *"Sabitlenen atama, motor tekrar çalıştırılsa bile değişmez."* (M7)
+  final bool isPinned;
+
+  final String? fullName;
+  final String? company;
+
+  String get displayName => fullName ?? 'Adı girilmemiş';
+}
+
+/// Slot görünümündeki bir masa (M7).
+///
+/// Boş masalar da geliyor: organizatör birini boş sandalyeye taşıyabilmeli.
+class SeatedTable {
+  const SeatedTable({
+    required this.tableId,
+    required this.number,
+    required this.capacity,
+    required this.occupants,
+    required this.quality,
+    required this.score,
+    this.label,
+  });
+
+  factory SeatedTable.fromJson(Map<String, dynamic> json) => SeatedTable(
+        tableId: json['table_id'] as int,
+        number: json['number'] as int,
+        capacity: json['capacity'] as int,
+        occupants: (json['occupants'] as List<dynamic>)
+            .map((item) => SeatedPerson.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        quality: TableQuality.fromKey(json['quality'] as String),
+        score: (json['score'] as num).toDouble(),
+        label: json['label'] as String?,
+      );
+
+  final int tableId;
+  final int number;
+  final int capacity;
+  final List<SeatedPerson> occupants;
+  final TableQuality quality;
+
+  /// Hata ayıklama ve sıralama için; organizatöre gösterilmiyor (M8, Bölüm 13).
+  final double score;
+
+  final String? label;
+
+  bool get isEmpty => occupants.isEmpty;
+  bool get isFull => occupants.length >= capacity;
+  String get title => label == null || label!.isEmpty ? 'Masa $number' : label!;
+}
+
+/// Bir turun bütün masaları.
+class SlotView {
+  const SlotView({required this.slotNumber, required this.tables});
+
+  factory SlotView.fromJson(Map<String, dynamic> json) => SlotView(
+        slotNumber: json['slot_number'] as int,
+        tables: (json['tables'] as List<dynamic>)
+            .map((item) => SeatedTable.fromJson(item as Map<String, dynamic>))
+            .toList(),
+      );
+
+  final int slotNumber;
+  final List<SeatedTable> tables;
+
+  int get seatedCount =>
+      tables.fold(0, (total, table) => total + table.occupants.length);
+}
+
+/// Takas sonrası uyarı (M7).
+///
+/// Sunucu anahtar gönderiyor, Türkçe cümle burada kuruluyor — kontrol
+/// listesindeki uyarılarla aynı kalıp. **Engel değil:** takas zaten yapıldı,
+/// *"organizatör uyarıya rağmen devam edebilir — ama ne yaptığını bilerek
+/// yapar."*
+class SwapWarning {
+  const SwapWarning({
+    required this.key,
+    required this.people,
+    this.tableNumber,
+    this.slotNumber,
+  });
+
+  factory SwapWarning.fromJson(Map<String, dynamic> json) => SwapWarning(
+        key: json['key'] as String,
+        people: (json['people'] as List<dynamic>)
+            .map((item) => item as String)
+            .toList(),
+        tableNumber: json['table_number'] as int?,
+        slotNumber: json['slot_number'] as int?,
+      );
+
+  final String key;
+  final List<String> people;
+  final int? tableNumber;
+  final int? slotNumber;
+
+  /// Cümlenin başındaki masa etiketi.
+  ///
+  /// **Sayıya ek getirilmiyor.** Türkçede ek sayının okunuşuna göre değişiyor:
+  /// "1'in" ama "2'nin", "3'ün", "4'te", "6'da"... Tabloya dökmek yerine cümle
+  /// eki gerektirmeyecek şekilde kuruldu. Tarayıcıda "Masa 2'ın" ve
+  /// "Masa 4'da" görüldükten sonra alınan karar.
+  String get _table => tableNumber == null ? 'Masa' : 'Masa $tableNumber';
+
+  /// Uyarının Türkçe karşılığı.
+  ///
+  /// Sunucu ileride yeni bir anahtar eklerse arayüz çökmemeli; tanınmayan
+  /// anahtar genel bir cümleye düşüyor.
+  String get message => switch (key) {
+        'same_company' =>
+          '$_table — aynı şirketten iki kişi var: ${people.join(', ')}. '
+              'İkisi burada birbirine yeni bir şey katmaz.',
+        'over_capacity' =>
+          '$_table — kapasitenin üzerinde: ${people.length} kişi oturuyor.',
+        'lonely_table' => '$_table — tek kişi kaldı: ${people.join(', ')}. '
+            'Yarım saat tek başına oturur.',
+        // Burada ek sorunu yok: "turda" eki sayıya değil "tur" kelimesine
+        // geliyor ve her sayı için aynı.
+        'repeat_pair' =>
+          '${people.join(' ile ')} ${slotNumber ?? '?'}. turda zaten '
+              'görüşüyor. İkinci görüşme kimseye yeni bir şey katmaz.',
+        'quality_dropped' =>
+          '$_table — eşleşme kalitesi eşiğin altına düştü.',
+        _ => '$_table — beklenmeyen bir durum var.',
+      };
+}
+
+/// Takasın sonucu: yeni slot görünümü ve uyarılar.
+///
+/// İkisi birlikte dönüyor ki istemci ikinci bir istek atmasın.
+class SwapResult {
+  const SwapResult({required this.slot, required this.warnings});
+
+  factory SwapResult.fromJson(Map<String, dynamic> json) => SwapResult(
+        slot: SlotView.fromJson(json['slot'] as Map<String, dynamic>),
+        warnings: (json['warnings'] as List<dynamic>)
+            .map((item) => SwapWarning.fromJson(item as Map<String, dynamic>))
+            .toList(),
+      );
+
+  final SlotView slot;
+  final List<SwapWarning> warnings;
 }
 
 // --- Başvuru (M3) ------------------------------------------------------------
