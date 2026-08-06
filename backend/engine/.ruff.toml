@@ -1,0 +1,24 @@
+# Motor sınırının lint tarafındaki karşılığı (şartname Bölüm 5.1).
+#
+# Asıl güvence tests/test_engine_boundary.py'dir — bu dosya yalnızca hatayı
+# yazarken, testi beklemeden göstermek için var.
+#
+# Ruff her dosya için en yakın yapılandırmayı kullanır; bu dosya yalnızca
+# engine/ altındaki kodu etkiler. Ortak ayarlar üst yapılandırmadan gelir.
+
+extend = "../pyproject.toml"
+
+[lint.flake8-tidy-imports.banned-api]
+"fastapi".msg = "Motor HTTP bilmez (sartname 5.1)."
+"starlette".msg = "Motor HTTP bilmez (sartname 5.1)."
+"sqlalchemy".msg = "Motor veritabani bilmez (sartname 5.1)."
+"alembic".msg = "Motor veritabani bilmez (sartname 5.1)."
+"asyncpg".msg = "Motor veritabani bilmez (sartname 5.1)."
+"psycopg".msg = "Motor veritabani bilmez (sartname 5.1)."
+"redis".msg = "Motor kuyruk bilmez (sartname 5.1)."
+"arq".msg = "Motor kuyruk bilmez (sartname 5.1)."
+"httpx".msg = "Motor ag cagrisi yapmaz (sartname 5.1)."
+"requests".msg = "Motor ag cagrisi yapmaz (sartname 5.1)."
+"pydantic".msg = "Motor girdisini sade veri yapisi olarak alir (sartname 9.2)."
+"pydantic_settings".msg = "Motor ayarlari disaridan alir, ortamdan okumaz."
+"app".msg = "Bagimlilik ters yonde olamaz: app motoru cagirir, motor app'i cagiramaz."

@@ -1,0 +1,16 @@
+# B2X — kök sarmalayıcı
+#
+# Servis tanımları infra/docker-compose.yml içinde durur (şartname Bölüm 3, klasör yapısı).
+# Bu dosyanın tek işi, komutun depo kökünden çalışmasını ve kökteki .env dosyasının
+# okunmasını sağlamak:
+#
+#   docker compose up -d          tüm sistem
+#   docker compose up -d db redis sadece veri servisleri (günlük geliştirme)
+#
+# Proje adı .env içindeki COMPOSE_PROJECT_NAME değişkeninden gelir; burada name:
+# tanımlanmaz, çünkü dosyadaki name: o değişkeni geçersiz kılardı.
+
+include:
+  - path: infra/docker-compose.yml
+    project_directory: .
+    env_file: .env

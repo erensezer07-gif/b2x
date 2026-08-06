@@ -52,10 +52,151 @@ docs/            notlar, kararlar
 
 ## Şu anki durum
 
-**Aşama 0 — Temel.** Repo iskeleti, Docker Compose, veritabanı bağlantısı, migration altyapısı, boş FastAPI ve Flutter projeleri.
+**Aşama 0 bitti.** Docker Compose dört servisi ayağa kaldırıyor (db, redis, api, worker), motor sınırı testle korunuyor, Flutter iskeleti derleniyor.
 
-Aşama 2 (eşleştirme motoru) bitmeden hiçbir ekran yazılmaz.
+**Aşama 1 bitti.** Spec Bölüm 6'daki 16 tablo `backend/app/models/` altında, tek migration'da (`0001_veri_modeli`). Plan versiyonlama baştan kuruldu: bir etkinlikte aynı anda en fazla bir plan yayında olabilir, bu koşullu benzersiz indeksle zorlanıyor. 22 kısıt testi şemanın gerçekten koruduğunu kanıtlıyor.
+
+**Aşama 2 bitti — eşleştirme motoru çalışıyor.** Spec Bölüm 9'un tamamı: Adım 1-6, minimum değişim modu (9.8) ve 9.10'daki test setinin tamamı. `backend/engine/` yalnızca standart kütüphane ve NumPy kullanıyor.
+
+200 katılımcı / 8 tur / 50 masa ölçeğinde ~5 saniye, kesin kural ihlali yok, herkes asgari tur hedefini tutturuyor. Check-in sonrası yeniden çalıştırmada 100 kişilik plandan 10 kişi çıkınca kalan 90 kişiden yalnızca 11'inin yeri değişiyor (sıfırdan çalıştırma 90'ını da değiştirirdi).
+
+**Aşama 3 bitti — kimlik ve profil çalışıyor.**
+
+*Backend:* Argon2id şifre özetleme, erişim/yenileme jetonları, kayıt-giriş-tazeleme uçları, profil (kısmi güncelleme), şirket tekilleştirme, sektör ve etiket havuzu, depolama arayüzü ve fotoğraf uçları. 166 test.
+
+*İstemci:* Tema tek dosyada, üç durum bileşenleri, API istemcisi, güvenli jeton deposu, sessiz yenileme, kayıt/giriş ekranları, beş adımlı profil sihirbazı, profil özeti. 13 test.
+
+Tarayıcıda uçtan uca doğrulandı: kayıt → sihirbazın beş adımı → %89 tamamlanma → "başvurabilirsin" → sayfa yenilemede kaldığı adımdan devam.
+
+**Aşama 4 bitti — etkinlik oluşturma ve otomatik salon düzeni.**
+
+*Backend:* Program hesaplama servisi, etkinlik CRUD, kapak görseli, otomatik masa üretimi, kapasite uyarısı, kayıtları açma kapısı, sahiplik kontrolü. 204 test.
+
+*İstemci:* Alt gezinme (Etkinlikler + Profilim), etkinlik listesi, dört adımlı sihirbaz, anlık program önizlemesi. 23 test.
+
+Tarayıcıda doğrulandı: taslak → dört adım → tur eklenince süre 3:50'den 4:30'a → 10 masa 1-10 numaralı → kapasite uyarısı (100 kişi / 60 kişilik salon) → kayıtlar açıldı.
+
+**Aşama 5 bitti — manuel salon editörü.**
+
+*Backend:* Manuel mod ucu, masa yerleştirme ve taşıma, alan bloğu CRUD, hücre çakışması (masa↔masa ve masa↔alan bloğu), ızgara sınırları. Varsayılan ızgara 24×16 hücre. 231 test.
+
+*İstemci:* `InteractiveViewer` tuvali, ızgaraya oturan sürükle-bırak, araç çubuğu, masa ve alan panelleri, biriken otomatik kaydetme. 45 test.
+
+Aşama 1'den devreden borç kapandı: masa ile alan bloğunun aynı hücreyi paylaşmaması şemada ifade edilemiyordu, `app/services/layout.py` içindeki `find_cell_conflict()` ile uygulandı.
+
+Tarayıcıda doğrulandı: otomatik 6 masa → manuele geçişte masalar korunup dizildi → sürükle-bırak ızgaraya oturdu → dolu hücreye bırakma "Bu hücre dolu: 5 numaralı masa." → sahne bloğu → numara çakışmasında satır içi uyarı → sayfa yenilemede düzen kayıpsız → sihirbaza dönüşte kapasite 36'dan 43'e güncellendi.
+
+**Sıradaki: Aşama 6 — Etkinlik keşfi ve başvuru.** Liste, detay, başvuru akışı, organizatörün başvuru yönetimi.
+
+### API uçları
+
+```
+POST /auth/register  POST /auth/login  POST /auth/refresh  GET /auth/me
+GET  /profile        PATCH /profile
+POST /profile/photo  DELETE /profile/photo
+GET  /companies?q=   POST /companies
+GET  /sectors        GET /tag-categories
+GET  /files/...      (yerel depolamadaki dosyalar)
+
+GET  /events              POST /events
+GET  /events/{id}         PATCH /events/{id}
+POST /events/{id}/cover   DELETE /events/{id}/cover
+POST /events/{id}/open-registration
+
+GET  /events/{id}/layout
+PUT  /events/{id}/layout/auto      PUT /events/{id}/layout/manual
+POST /events/{id}/tables           PATCH /events/{id}/tables/{tid}
+DELETE /events/{id}/tables/{tid}
+POST /events/{id}/areas            PATCH /events/{id}/areas/{aid}
+DELETE /events/{id}/areas/{aid}
+```
+
+Çıkış ucu yok: jetonlar durumsuz, çıkış istemcide jetonu silmekle olur.
+
+**Motoru denemek için:** `cd backend && python -m engine.cli --katilimci 200 --slot 8 --masa 50`
+
+Verilen kararlar ve gerekçeleri: `docs/kararlar.md`.
 
 ## Komutlar
 
-Bu bölüm Aşama 0 tamamlanınca doldurulacak.
+Docker WSL2 içinde çalışıyor; `docker compose` komutları WSL kabuğundan verilir.
+
+Açık bir `wsl.exe` oturumu kalmazsa WSL localhost port yönlendirmesini kaldırır: konteynerler ayakta kalır ama Windows'tan `localhost:5432` kapanır. Oturum açılışında çalışan bir zamanlanmış görev bunu önlüyor — kurulumu ve denenip işe yaramayanlar README'de.
+
+**Sistem**
+
+```
+docker compose up -d              tüm sistem (db, redis, api, worker)
+docker compose up -d db redis     sadece veri servisleri — günlük geliştirme
+docker compose ps                 servis durumları
+docker compose logs -f api        günlük takibi
+```
+
+**Backend** (venv etkin, `backend/` klasöründen)
+
+```
+uvicorn app.main:app --reload     sunucu
+arq app.worker.WorkerSettings     arka plan işçisi
+pytest                            testler — veritabanı gerektirmez
+ruff check . && ruff format .     lint ve biçim
+alembic upgrade head              şemayı güncelle
+alembic revision --autogenerate -m "aciklama"
+```
+
+Sanal ortam bir kez: `python -m venv .venv` ardından `pip install -e ".\backend[dev]"`.
+
+**İstemci** (`app/` klasöründen)
+
+```
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8000
+flutter analyze
+flutter test
+flutter build web --dart-define=API_BASE_URL=<adres>
+```
+
+Sunucu adresi koda gömülmez, `--dart-define` ile verilir.
+
+**Doğrulama**
+
+```
+curl http://localhost:8000/health         süreç ayakta mı
+curl http://localhost:8000/health/ready   db ve redis'e erişiliyor mu
+```
+
+## Dikkat edilecek tuzaklar
+
+**`backend/alembic.ini` yalnızca ASCII.** Alembic bu dosyayı işletim sisteminin yerel kod sayfasıyla okur; Türkçe karakter Windows'ta dosyayı okunamaz yapar. Diğer dosyalarda Türkçe serbest.
+
+**Motor sınırı testle korunuyor.** `backend/engine/` altına FastAPI, SQLAlchemy, veritabanı veya HTTP kütüphanesi import edilirse `pytest` kırılır.
+
+**Yeni durum alanı eklerken `status_check` kullan.** `app/models/enums.py` içindeki `status_column` tek başına CHECK kısıtı üretmez — sütun denetimsiz metin olur. Kısıt `status_check` ile `__table_args__` içine elle yazılır.
+
+**Migration ürettikten sonra kayma kontrolü yap.** `alembic revision --autogenerate` ikinci kez çalıştırıldığında **boş** revizyon üretmeli. Üretmiyorsa model ile migration ayrışmıştır.
+
+**Modelin yeni modülü `app/models/__init__.py`'ye eklenmeli.** Eklenmezse `Base.metadata` onu görmez ve autogenerate tabloyu "silinmiş" sayar.
+
+**Motorda yeni hamle veya kural yazarken amaç fonksiyonunu da kontrol et.** `PlanState.objective()` kullanılmayan masayı 0 puan sayar; kötü bir masa da 0 alırsa arama ikisini ayırt edemez. Boş masaya tek kişi oturtma hatası tam olarak böyle oluştu — ayrıntı `docs/kararlar.md`'de.
+
+**Şirket normalleştirmesine dokunursan testleri çalıştır.** `app/services/company.py` aynı şirketin farklı yazımlarını tek kimliğe indirger; "aynı şirketten iki kişi aynı masaya oturamaz" kuralının tamamı buna dayanır. Noktanın ayraç sayılması bu kuralı sessizce bozmuştu.
+
+**Test e-postaları `.test` veya `.local` olamaz.** `email-validator` ayrılmış üst düzey alan adlarını reddeder; `tests/conftest.py` içindeki `unique_email` fixture'ı kullanılmalı.
+
+**Ekranlarda sabit renk veya aralık yazma.** Hepsi `app/lib/core/theme/app_theme.dart` içinden gelir; görsel kimlik kararı verildiğinde tek dosya değişecek.
+
+**Yeni ekran yazarken üç durumu da kur.** `app/lib/core/widgets/state_views.dart` içindeki `LoadingView`, `ErrorView`, `EmptyView` kullanılır — sonradan eklenmez.
+
+**Form hatasını `AsyncValue.guard` ile paylaşılan duruma yazma.** Yönlendirme o durumu görüp kullanıcıyı başka sayfaya atar, hata hiç okunmaz. Hata formun kendi state'inde tutulur.
+
+**Testte modül seviyesindeki fonksiyonu yamalama.** Uçlar `from ... import x` ile fonksiyonu kendi ad alanlarına kopyalar; modülü değiştirmek onları etkilemez. FastAPI bağımlılığı yapıp `dependency_overrides` kullan — `StorageDep` bu yüzden var.
+
+**Dosya yükleyen istek `FormData` klonlamalı.** Akış ilk gönderimde tükenir; sessiz yenileme tekrar denediğinde sunucuya boş gövde gider. `api_client.dart` bunu araya giricide hallediyor.
+
+**Veri değiştikten sonra `invalidate` tek başına yetmez.** Yeniden hesaplama asenkron başlar; hemen gezinirsen ekran eski veriyle açılır. `invalidate` + `await read(...future)` kullan — `EventActions` bu kalıbı izliyor.
+
+**Program hesabı iki yerde: `schedule.py` ve `schedule.dart`.** Birini değiştirirsen diğerini de değiştir; aynı senaryolar iki tarafta da test ediliyor (`test_schedule.py`, `schedule_test.dart`).
+
+**Hücre çakışmasını `find_cell_conflict()` üzerinden geçir.** Masa↔masa çakışmasını veritabanı indeksi de yakalar ama numara çakışmasıyla aynı `IntegrityError`'a düşer; mesaj yanlış çıkar. Masa↔alan bloğu çakışması ise **yalnızca** `app/services/layout.py` içinde kontrol ediliyor, şemada karşılığı yok.
+
+**Panelde otomatik kaydetme birikimli olmalı.** `layout_sheets.dart` içindeki `_DebouncedSaver` bekleyen değişiklikleri bir sözlükte topluyor. Tek bir gönderim tutulursa arka arkaya değiştirilen iki alandan ilki sessizce kaybolur — tam olarak böyle oldu, ayrıntı `docs/kararlar.md`'de.
+
+**Görünmeyen ilerleme göstergesi bırakma.** Saydamlığı sıfırlanmış `CircularProgressIndicator` tik atmaya devam eder ve `pumpAndSettle` hiç durulmaz; gösterge yalnızca gerektiğinde kurulmalı.

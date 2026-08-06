@@ -1,0 +1,12 @@
+Alembic migration'ları — tek veritabanı, async sürücü.
+
+Bağlantı adresi alembic.ini içinde değil, env.py içinde app.config üzerinden
+ortam değişkeninden okunur.
+
+Kullanım (backend/ klasöründen):
+
+  alembic upgrade head                       şemayı en güncel hale getirir
+  alembic revision --autogenerate -m "..."   model farkından yeni revizyon üretir
+  alembic downgrade -1                       bir adım geri alır
+
+Tablolar Aşama 1'de eklenecek; versions/ şu an boştur.

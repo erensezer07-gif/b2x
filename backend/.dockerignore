@@ -1,0 +1,12 @@
+# İmaja girmemesi gerekenler. Yollar backend/ klasörüne göredir.
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/

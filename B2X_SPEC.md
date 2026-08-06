@@ -208,8 +208,10 @@ Etiketler kategorilere ayrılır (örneğin: yazılım hizmetleri, finansman, ü
 - Slot süresi (dakika), mola süresi (dakika), slot sayısı
 - Kontenjan
 - Başvuru son tarihi
+- Başvuru onay biçimi: otomatik kabul / organizatör tek tek onaylar (M4)
 - **Durum:** taslak / kayıtlar açık / kayıtlar kapalı / tamamlandı
 - Talep sistemi kapanış zamanı
+- Katılımcı başına talep hakkı (M9, varsayılanı ortam dosyasından gelir)
 
 Etkinlik durumu yalnızca **başvuru akışını** yönetir. Planın hazır olup olmadığı, yayınlanıp yayınlanmadığı buraya yazılmaz — o bilgi plan tablosunda durur.
 
@@ -804,12 +806,12 @@ Bu numaralandırma projenin yapım sırasıdır. Algoritmanın içindeki "Adım"
 
 Bunlar henüz netleşmedi, ilerledikçe doldurulacak.
 
-- Etiket havuzunun içeriği: kaç kategori, her kategoride hangi etiketler
-- Sektör listesinin içeriği
+- ~~Etiket havuzunun içeriği: kaç kategori, her kategoride hangi etiketler~~ — Aşama 3'te başlangıç seti kondu: 6 kategori × 8 etiket. Gerçek etkinlik verisiyle ayarlanacak
+- ~~Sektör listesinin içeriği~~ — Aşama 3'te başlangıç seti kondu: 18 sektör. Gerçek etkinlik verisiyle ayarlanacak
 - Sinerji skoru bileşenlerinin başlangıç ağırlıkları (test verisiyle ayarlanacak)
 - Kalite eşiğinin nihai değeri — başlangıç değeri ortam dosyasında, test verisiyle ayarlanacak
 - Görsel kimlik ve tema (Departure Board estetiği — ayrı bir tasarım notunda ele alınacak)
-- Manuel salon editöründe varsayılan ızgara boyutu ve hücre ölçüsü
+- ~~Manuel salon editöründe varsayılan ızgara boyutu ve hücre ölçüsü~~ — Aşama 5'te kondu: 24×16 hücre, hücre 64 piksel. Izgara 2 ile 60 arasında ayarlanabilir
 - Proje devredildikten sonra hangi sunucuya kurulacağı — devir teslim dokümanında kurulum adımları anlatılacak
 
 ---
