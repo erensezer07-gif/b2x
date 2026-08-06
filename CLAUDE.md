@@ -140,7 +140,17 @@ Tarayıcıda doğrulandı: yayınlanmadan "Oturma planınız henüz hazırlanıy
 
 Talep bonusu (9.3) ilk kez gerçek veriyle çalıştı; `meeting_requests` Aşama 1'den beri boştu. Aşama 9'daki `mutual_request` gerekçesi de ilk kez tetikleniyor.
 
-**Sıradaki: Aşama 11 — Check-in.** QR üretimi, tarama ekranı, elle işaretleme, minimum değişim modunda yeniden çalıştırma.
+**Aşama 11 bitti — check-in ve planın yenilenmesi.**
+
+*Backend:* Giriş kodu, check-in listesi ve sayaç, QR okuma, elle işaretleme, minimum değişim modunda yeniden çalıştırma, "kimin yeri değişti". 388 test.
+
+*İstemci:* Katılımcının QR ekranı, organizatörün check-in ekranı (kamera + elle arama), yeri değişenler paneli. 164 test.
+
+Motorun 9.8'i (minimum değişim) Aşama 2'de yazılmıştı ve bugüne kadar hiç tetiklenmemişti: `previous_plan`, `frozen_slots`, `absent_participants`, `move_penalty`. Aşama 8'in `is_pinned` alanı da ilk kez `FixedAssignment` olarak motora geçiyor. `plans.minimal_change` eklendi (migration `0005`).
+
+9.10'un minimum değişim testi ilk kez gerçek veriyle: 12 kişilik plandan 2 kişi çıkınca kalanların yarısından azının yeri değişiyor.
+
+**Sıradaki: Aşama 12 — Sağlamlaştırma.** Uçtan uca deneme, hata durumları, boş durumlar, devir teslim dokümanı.
 
 ### API uçları
 
@@ -183,6 +193,10 @@ GET /events/{id}/tablemates/{rid}
 
 GET    /events/{id}/participants?q=&sector_id=
 POST   /events/{id}/requests        DELETE /events/{id}/requests/{rid}
+
+GET  /events/{id}/my-qr             GET /events/{id}/attendance?q=
+POST /events/{id}/attendance/scan   POST /events/{id}/attendance/{rid}
+GET  /events/{id}/plans/{pid}/changes
 ```
 
 Çıkış ucu yok: jetonlar durumsuz, çıkış istemcide jetonu silmekle olur.
@@ -322,4 +336,10 @@ curl http://localhost:8000/health/ready   db ve redis'e erişiliyor mu
 **Talep hakkı yalnızca aktif talepleri sayıyor.** Geri çekmek hakkı iade ediyor: kıtlığın anlamı "aynı anda kaç kişiyi istiyorsun". Sayacı toplam gönderime çevirmek kullanıcıyı hatasıyla baş başa bırakır.
 
 **Talepler kapandıysa geri çekme de kapalı.** Açık bırakmak kilitlenmiş bir planı yeniden oynatırdı (M9'un kapanış gerekçesi).
+
+**Gelmeyeni katılımcı listesinden silme.** Motor indeks tabanlı; listeden çıkarmak indeksleri kaydırır ve `previous_plan` referansları başka kişilere işaret eder. `absent_participants` kümesine gir.
+
+**Check-in yapılmadan plan yenilenemez.** Kimse okutulmamışsa herkes `absent` ve plan tamamen boşalır. `has_check_in` kapısı `POST /plans` içinde.
+
+**Türkçe aramada `str.lower()` yetmiyor.** "İ" küçültülünce noktalı i + birleşen nokta oluyor ve "i" ile eşleşmiyor. `attendance._fold` harfleri katlıyor; yeni bir arama yazarken onu kullan.
 
