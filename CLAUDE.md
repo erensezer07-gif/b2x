@@ -150,7 +150,28 @@ Motorun 9.8'i (minimum değişim) Aşama 2'de yazılmıştı ve bugüne kadar hi
 
 9.10'un minimum değişim testi ilk kez gerçek veriyle: 12 kişilik plandan 2 kişi çıkınca kalanların yarısından azının yeri değişiyor.
 
-**Sıradaki: Aşama 12 — Sağlamlaştırma.** Uçtan uca deneme, hata durumları, boş durumlar, devir teslim dokümanı.
+**Detaylı tarayıcı turu yapıldı.** Kayıttan yeniden yayınlamaya kadar tek oturumda: profil sihirbazı → etkinlik sihirbazı → manuel salon → başvuru ve onay → görüşme talebi → eşleştirme → takas → yayınlama → katılımcı görünümü → QR → check-in → gelmeyenleri çıkarma → yeniden yayınlama. Versiyon 1 arşive geçti, versiyon 2 yayında.
+
+Turda **altı kusur** çıktı, hepsi düzeltildi (394 backend + 173 istemci testi). Ayrıntılar `docs/kararlar.md`'de:
+
+- Takas turu tazeliyordu ama özeti değil — karşılanmayan talep paneli hiç açılmıyordu.
+- Çıkıp başka hesapla girince "Profilim" önceki kullanıcının profilini gösteriyordu.
+- Karşılıklı talep gerekçesi üretimde hiç görünmemiş: `build_my_plan` bayrağı göndermiyordu.
+- Plan yayınlandıktan sonra da "yayınlandığında masan burada görünecek" yazıyordu.
+- **Özet gelmeyenleri sayıyordu.** Şartnameye yazıldı (M7 + M10), sonra düzeltildi: gelmeyenler hesaptan düşülüyor, *"5 kişi gelmedi"* diye ayrı sayılıyor. Aynı veride 0/5 kişi/9 kişi olan sayılar 3/yok/4 kişi oldu.
+- **Sayfa yenileyince derin bağlantı kayboluyordu.** İstenen adres artık açılışta bekletilip oturum çözülünce oraya devam ediliyor.
+
+**Aşama 12 bitti — sağlamlaştırma.**
+
+*Boş durumlar:* Bütün ekranlar tarandı; üç durum eksiksiz ve boş durum mesajları bağlama duyarlı (süzgeçli listede ayrı cümle). Katılımcısız bir etkinlik açılıp tek tek gezildi. Tek tutarsızlık düzeltildi: düğme kapalıyken "yine de çalıştırabilirsin" yazıyordu.
+
+*Hata yolları:* Ağ hatası artık jetonu silmiyor (yalnızca 401 siliyor) — etkinlik günü şebekesi zayıf olan katılımcı oturumunu kaybetmesin. Sessiz yenileme tutmazsa `onSessionLost` oturumu düşürüyor; eskiden kullanıcı her ekranda hata görüp çıkışı elle aramak zorundaydı. Kuyrukta 45 saniyeden fazla bekleyen plan sebebini söylüyor. `DB_TIMEOUT_SECONDS` eklendi: veritabanı kaybolduğunda istek sonsuza kadar beklemiyor.
+
+*Demo verisi:* `backend/scripts/demo.py` sahte bir etkinliği baştan sona kuruyor — kayıttan yayınlanmış plana kadar, **gerçek uçlardan**. Aynı zamanda duman testi: sonuna kadar gidiyorsa veritabanı, migration'lar, Redis, işçi ve motor birlikte çalışıyor demektir.
+
+*Devir teslim:* `docs/devir-teslim.md` — sistem haritası, dokunulmaz kurallar, kapsam dışı bırakılanlar, bilinen sınırlar, belirti→sebep tablosu.
+
+395 backend + 179 istemci testi.
 
 ### API uçları
 
@@ -201,7 +222,11 @@ GET  /events/{id}/plans/{pid}/changes
 
 Çıkış ucu yok: jetonlar durumsuz, çıkış istemcide jetonu silmekle olur.
 
+Plan yanıtındaki `absent_count`: minimum değişim modunda hesaptan düşülen kişi sayısı. Diğer özet sayıları (`min_meetings_per_person`, `unmatched`, değişim listesi) onları içermiyor — M7 ve M10.
+
 **Motoru denemek için:** `cd backend && python -m engine.cli --katilimci 200 --slot 8 --masa 50`
+
+**Demo verisi ve duman testi:** `cd backend && python scripts/demo.py` — sahte bir etkinliği kayıttan yayınlanmış plana kadar gerçek uçlardan geçirir. Sonuna kadar gidiyorsa veritabanı, migration'lar, Redis, işçi ve motor birlikte çalışıyor demektir.
 
 Verilen kararlar ve gerekçeleri: `docs/kararlar.md`.
 
@@ -280,6 +305,14 @@ curl http://localhost:8000/health/ready   db ve redis'e erişiliyor mu
 **Dosya yükleyen istek `FormData` klonlamalı.** Akış ilk gönderimde tükenir; sessiz yenileme tekrar denediğinde sunucuya boş gövde gider. `api_client.dart` bunu araya giricide hallediyor.
 
 **Veri değiştikten sonra `invalidate` tek başına yetmez.** Yeniden hesaplama asenkron başlar; hemen gezinirsen ekran eski veriyle açılır. `invalidate` + `await read(...future)` kullan — `EventActions` bu kalıbı izliyor.
+
+**Yazma işleminin dokunduğu *bütün* sağlayıcıları tazele.** Takas yalnızca `planSlotProvider`'ı tazeliyordu; üstteki özet eski kalıyordu ve karşılanmayan talep paneli hiç açılmıyordu. Dar sağlayıcıyı tazelemek, aynı yazmadan etkilenen geniş sağlayıcıyı kapsamıyor.
+
+**Oturum değişince kullanıcıya ait önbellekleri düşür.** `AuthController` girişte, kayıtta ve çıkışta `apiClientProvider`'ı tazeliyor — depolar onu, ekranların sağlayıcıları da depoları izlediği için zincirin tamamı düşüyor. Kökü tazelemek bilerek seçildi: sağlayıcıları tek tek saymak, sonradan eklenen birinin unutulması ve önceki kullanıcının verisinin sessizce görünmesi demekti. Bu yüzden **veri tutan bir sağlayıcı depoyu `read` değil `watch` ile almalı** — `read` bağımlılık kurmaz, zincir orada kopar.
+
+**Gelmeyeni hesaba katma, ama silme de.** Minimum değişim modunda üretilmiş planda gelmeyenler asgari tur, "hiç eşleşmeyen" ve "yeri değişen" sayılarının dışında (M7, M10) — `absentees_of()` bu kümeyi yalnızca `minimal_change` planlar için dolduruyor. Yeni bir özet sayısı eklerken aynı soruyu sor: bu sayı planın başarısını mı ölçüyor? Öyleyse gelmeyen içinde olmamalı.
+
+**Sunucuda hazır bir alan istemcide görünüyor diye bağlı sanma.** `build_reasons` karşılıklı talebi baştan biliyordu, istemci cümlesini de kuruyordu, birim testleri geçiyordu — ama `build_my_plan` bayrağı hiç göndermiyordu ve gerekçe üretimde hiç çıkmadı. İki ucu hazır özelliğin ortasını uçtan uca bir testle bağla.
 
 **Program hesabı iki yerde: `schedule.py` ve `schedule.dart`.** Birini değiştirirsen diğerini de değiştir; aynı senaryolar iki tarafta da test ediliyor (`test_schedule.py`, `schedule_test.dart`).
 

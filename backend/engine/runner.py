@@ -112,11 +112,17 @@ def build_summary(state: PlanState, runtime_ms: int) -> EngineSummary:
 
     "Görüşme" birimi turdur: `total_meetings` toplam oturma sayısı,
     `min_meetings_per_person` en az turda oturan kişinin tur sayısı.
+
+    **Gelmeyenler asgari tur hesabına girmiyor** (M7). Girseydi check-in
+    sonrası her planda bu sayı sıfır olurdu — gelmemiş birinin sıfır turu
+    motorun başarısızlığı değil ve panelin en önemli sayısı hiçbir şey
+    anlatmaz olurdu.
     """
     table_scores = state.used_table_scores()
+    present = state.rounds[~state.absent]
     return EngineSummary(
         total_meetings=int(state.rounds.sum()) if state.participant_count else 0,
-        min_meetings_per_person=int(state.rounds.min()) if state.participant_count else 0,
+        min_meetings_per_person=int(present.min()) if present.size else 0,
         participants_below_target=state.participants_below_target(),
         unmatched_participants=state.unmatched_participants(),
         satisfied_requests=state.satisfied_requests(),

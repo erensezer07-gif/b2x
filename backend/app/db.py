@@ -22,8 +22,22 @@ from app.config import get_settings
 
 @lru_cache
 def get_engine() -> AsyncEngine:
-    """Uygulama ömrü boyunca tek olan bağlantı havuzu."""
-    return create_async_engine(get_settings().database_url, pool_pre_ping=True)
+    """Uygulama ömrü boyunca tek olan bağlantı havuzu.
+
+    `pool_pre_ping` havuzdaki **kapanmış** bağlantıyı yakalıyor. Zaman aşımı
+    ise **cevapsız** bağlantı için: veritabanı ortadan kaybolduğunda soket
+    işletim sisteminin sınırına kadar bekler, uygulama ne hata verir ne cevap.
+    Sınır konunca istek düzgün bir hatayla biter — ayrıntı `config.py`'de.
+    """
+    settings = get_settings()
+    return create_async_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        connect_args={
+            "timeout": settings.db_timeout_seconds,
+            "command_timeout": settings.db_timeout_seconds,
+        },
+    )
 
 
 @lru_cache

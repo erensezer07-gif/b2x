@@ -549,6 +549,12 @@ class PlanEditActions {
       targetTableId: targetTableId,
     );
     _ref.invalidate(planSlotProvider(SlotQuery(eventId, planId, slotNumber)));
+    // Takas yalnızca o turu değil özeti de değiştiriyor: karşılanan talep
+    // sayısı düşebilir, karşılanmayan karşılıklı talep listeye girebilir,
+    // biri eşleşmesiz kalabilir. Özet tazelenmezse organizatör neyi bozduğunu
+    // göremez — tarayıcı turunda tam olarak böyle oldu.
+    _ref.invalidate(planProvider(PlanQuery(eventId, planId)));
+    await _ref.read(planProvider(PlanQuery(eventId, planId)).future);
     return result;
   }
 

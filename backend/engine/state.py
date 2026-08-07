@@ -232,10 +232,15 @@ class PlanState:
         return int(np.count_nonzero(self.location != self.previous_location))
 
     def moved_participants(self) -> tuple[int, ...]:
-        """Herhangi bir slotta yeri değişmiş kişiler — organizatöre gösterilir (9.8)."""
+        """Herhangi bir slotta yeri değişmiş kişiler — organizatöre gösterilir (9.8).
+
+        Gelmeyenler sayılmaz: onların masadan kalkması bir "yer değişikliği"
+        değil, check-in'in doğrudan sonucu. Sayılsaydı 9.8'in ölçüsü
+        (*"kaç kişi kıpırdadı"*) tam da gelmeyen kalabalığıyla şişerdi.
+        """
         if self.previous_location is None:
             return ()
-        changed = np.any(self.location != self.previous_location, axis=0)
+        changed = np.any(self.location != self.previous_location, axis=0) & ~self.absent
         return tuple(int(index) for index in np.flatnonzero(changed))
 
     def objective(self) -> float:

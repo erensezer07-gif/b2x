@@ -568,6 +568,24 @@ class PlanSummaryPanel extends StatelessWidget {
                 ),
               ),
             ],
+            // Gelmeyenler yukarıdaki sayıların hiçbirine girmiyor (M7), ama
+            // yok da sayılmıyorlar: kaç kişi olduğu burada yazıyor. İkisi
+            // karışırsa "en az görüşme" gelmeyenlerin sıfırına düşer ve
+            // "hiç eşleşmeyen" listesi salonda olmayan insanları gösterir.
+            if (plan.absentCount > 0) ...[
+              const Divider(height: AppSpacing.lg),
+              Text(
+                '${plan.absentCount} kişi gelmedi',
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Yukarıdaki sayılar onları içermiyor.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
           ],
         ),
       ),

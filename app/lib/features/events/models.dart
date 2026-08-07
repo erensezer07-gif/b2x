@@ -471,6 +471,7 @@ class PlanSummary {
     required this.assignmentCount,
     required this.participantCount,
     required this.unmatched,
+    required this.absentCount,
     required this.satisfiedRequests,
     required this.totalRequests,
     required this.unmetRequests,
@@ -502,6 +503,7 @@ class PlanSummary {
         unmatched: (json['unmatched'] as List<dynamic>)
             .map((item) => item as String)
             .toList(),
+        absentCount: json['absent_count'] as int? ?? 0,
         satisfiedRequests: json['satisfied_requests'] as int,
         totalRequests: json['total_requests'] as int,
         unmetRequests: (json['unmet_requests'] as List<dynamic>)
@@ -533,6 +535,12 @@ class PlanSummary {
   /// Sayı değil isim: organizatör bunları görüp elle yerleştirebilmeli.
   final List<String> unmatched;
 
+  /// Hesabın dışında bırakılan kişi sayısı (M7).
+  ///
+  /// Yalnızca minimum değişim modunda üretilmiş planlarda sıfırdan büyük.
+  /// Yukarıdaki sayıların hiçbirine girmiyor ama yok da sayılmıyor.
+  final int absentCount;
+
   /// *"Karşılanan talep sayısı / toplam talep."* (M7)
   final int satisfiedRequests;
   final int totalRequests;
@@ -551,6 +559,14 @@ class PlanSummary {
   bool get isPending => jobStatus.isPending;
   bool get hasResult => jobStatus == JobStatus.done;
   bool get isPublished => status == PlanStatus.published;
+
+  /// İş kuyrukta takılmış görünüyor mu.
+  ///
+  /// Hata yok, ilerleme de yok — sebebi neredeyse her zaman arka plan
+  /// işçisinin çalışmıyor olması. Eşik cömert: 200 kişilik gerçek bir
+  /// çalıştırma birkaç saniye sürüyor, bu sürede bitmeyen iş beklemiyor.
+  bool get isStalled =>
+      isPending && DateTime.now().difference(createdAt) > const Duration(seconds: 45);
 }
 
 // --- Plan önizleme ve elle düzeltme (M7) -------------------------------------

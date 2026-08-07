@@ -30,6 +30,8 @@ from app.models import (
     Layout,
     LayoutArea,
     MatchReason,
+    MeetingRequest,
+    MeetingRequestStatus,
     Plan,
     PlanStatus,
     Profile,
@@ -210,6 +212,35 @@ async def _breakdowns(
     }
 
 
+async def _mutual_partners(session: AsyncSession, event_id: int, me: int) -> set[int]:
+    """Kişinin **karşılıklı** talepleştiği masa arkadaşları.
+
+    Tek taraflı talep bilerek dışarıda: M9 talebi karşı tarafa bildirmiyor
+    (*"sosyal baskı yaratmamak"*), kendi talebini geri okumak da bir şey
+    katmıyor. Yalnızca iki tarafın da yazdığı eşler dönüyor — gerekçe
+    listesinin en üstüne çıkan tek talep türü bu.
+    """
+    result = await session.execute(
+        select(
+            MeetingRequest.requester_registration_id,
+            MeetingRequest.target_registration_id,
+        ).where(
+            MeetingRequest.event_id == event_id,
+            MeetingRequest.status == MeetingRequestStatus.ACTIVE,
+            (MeetingRequest.requester_registration_id == me)
+            | (MeetingRequest.target_registration_id == me),
+        )
+    )
+    sent: set[int] = set()
+    received: set[int] = set()
+    for requester, target in result.all():
+        if requester == me:
+            sent.add(target)
+        else:
+            received.add(requester)
+    return sent & received
+
+
 async def build_my_plan(session: AsyncSession, event: Event, registration: Registration) -> MyPlan:
     """Katılımcının gördüğü plan (M8).
 
@@ -235,6 +266,7 @@ async def build_my_plan(session: AsyncSession, event: Event, registration: Regis
         registration.id,
     )
     breakdowns = await _breakdowns(session, plan.id, registration.id)
+    mutual = await _mutual_partners(session, event.id, registration.id)
     viewer = registration.user.profile
 
     slots = []
@@ -253,6 +285,7 @@ async def build_my_plan(session: AsyncSession, event: Event, registration: Regis
                                 viewer,
                                 profile,
                                 breakdowns.get((timing.number, other.id), {}),
+                                mutual_request=other.id in mutual,
                             )
                         ),
                     )

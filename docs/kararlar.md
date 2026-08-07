@@ -1723,3 +1723,214 @@ gibi okunurdu.
 Plan güncelleme yeni bir versiyon üretiyor; o iş zaten eşleştirme ekranının
 işi. Düğme yalnızca hesabı bitmiş bir plan varken çıkıyor; kimse
 okutulmadıysa sunucu 409 ile duruyor ve sebebini yazıyor.
+
+## Aşama 11 sonrası — Detaylı tarayıcı turu
+
+Aşama 11 bitince uçtan uca bir tur yapıldı: kayıt → profil sihirbazı →
+etkinlik sihirbazı → manuel salon → başvuru ve onay → görüşme talebi →
+eşleştirme → plan düzeltme → yayınlama → katılımcı görünümü → check-in →
+gelmeyenleri çıkarma → yeniden yayınlama.
+
+Beş kusur çıktı. Dördü düzeltildi, biri şartname konusu olduğu için
+bekliyor.
+
+### Takas özeti de tazeliyor
+
+Takas yalnızca `planSlotProvider`'ı tazeliyordu. Turdaki masalar
+değişiyordu ama üstteki özet eskisini gösteriyordu: sunucuda karşılanan
+talep 3/3'ten 1/3'e düşmüş, ekranda hâlâ 3/3 yazıyordu. Karşılanmayan
+karşılıklı talep paneli de hiç açılmıyordu — yani Aşama 10'da eklenen
+panel, onu tetikleyen tek işlemden sonra görünmüyordu.
+
+`PlanEditActions.swap` artık `planProvider`'ı da tazeliyor ve yeni özeti
+bekliyor. Bu, CLAUDE.md'deki *"invalidate tek başına yetmez"* tuzağının
+ikinci yüzü: **dar sağlayıcıyı tazelemek, aynı yazma işleminden etkilenen
+geniş sağlayıcıyı kapsamıyor.**
+
+### Oturum değişince önbellekler düşüyor
+
+Çıkış yapıp başka hesapla girildiğinde "Profilim" bir önceki kullanıcının
+adını, unvanını, şirketini ve etiketlerini gösteriyordu. Sebep:
+`profileControllerProvider` bir `AsyncNotifier`, kimse izlemese bile
+uygulama boyunca yaşıyor.
+
+Sağlayıcıları tek tek saymak yerine **zincirin kökü** tazeleniyor:
+`apiClientProvider` → depolar → ekranların sağlayıcıları.
+`AuthController` girişte, kayıtta ve çıkışta `ref.invalidate(apiClientProvider)`
+çağırıyor. Tek tek saymak, sonradan eklenen bir sağlayıcının listeye
+yazılmasının unutulması demekti — ve unutulduğunda hata sessiz olurdu.
+
+`ProfileController.build()` depoyu artık `read` değil **`watch`** ile
+alıyor; bağımlılık kurulmazsa zincir orada kopuyor.
+
+Çıkışta sıra önemli: önce durum, sonra önbellek. Ters sırada sağlayıcılar
+jetonsuz kalmış istemciyle yeniden istek atıyor ve kullanıcı çıkarken bir
+anlık hata ekranı görüyor.
+
+### Karşılıklı talep gerekçesi hiç görünmüyormuş
+
+`build_reasons` karşılıklı talebi baştan biliyordu ve listenin en üstüne
+koyuyordu (skoru ne olursa olsun). Birim testleri de geçiyordu. Ama
+`build_my_plan` bayrağı **hiç göndermiyordu** — üretimde bu gerekçe hiç
+çıkmadı. Aşama 10'da açılan, iki uçtan da hazır ama ortası bağlanmamış bir
+boşluktu; ancak uçtan uca bakınca görüldü.
+
+`_mutual_partners()` eklendi: yalnızca iki tarafın da yazdığı eşler.
+Tek taraflı talep hâlâ hiç gösterilmiyor (M9: *"sosyal baskı
+yaratmamak"*).
+
+### "Planın yayınlandığında masan burada görünecek"
+
+Plan yayına alındıktan sonra da yazıyordu, hemen üstünde "Oturma planım"
+düğmesi dururken. Bu ekran planın hazır olup olmadığını bilmiyor — kapı
+sunucuda. Söz veren cümle kaldırıldı: *"Başvurun kabul edildi."*
+
+### Özet artık gelmeyenleri saymıyor
+
+Check-in sonrası minimum değişim modunda çalıştırılan plan doğru çıkıyor —
+gelen 4 kişi üç turda birbirlerinin hepsiyle görüşüyor, 4. ve 5. turlar boş
+çünkü eklenecek yeni ikili kalmamış. Ama **özet gelmeyenleri hesaba
+katıyor**:
+
+- "En az görüşme alan: **0 tur**" — gelmeyenlerin sıfırı yüzünden.
+  Organizatörün en önemli sayısı felaket gibi okunuyor.
+- "Hiç eşleşmeyen: **5 kişi**" — beşi de gelmeyen. Üstelik altındaki cümle
+  *"Boş sandalyelere elle yerleştirebilirsin"* diyor: gelmemiş insanları
+  oturtmayı öneriyor.
+- "**9 kişinin yeri değişti**" — dokuzun beşi gelmeyen. 32 değişim
+  satırının 22'si "masadan kalktı"; işe yarayan 10 satır aralarında
+  kayboluyor.
+
+Doğrusu şu olmalıydı: en az görüşme 3, hiç eşleşmeyen 0, yeri değişen 4
+kişi.
+
+Bu sayıların anlamı şartnamede tanımlıydı, o yüzden önce oraya yazıldı
+(M7 özet paneli, M10 değişim listesi), sonra kodlandı.
+
+**Karar: gelmeyenler hesaptan düşülüyor, ayrı bir satırda sayılıyor.**
+Silinmiyorlar — *"5 kişi gelmedi. Yukarıdaki sayılar onları içermiyor."*
+
+Düzeltme dört yerde:
+
+| Nerede | Ne değişti |
+|---|---|
+| `engine/runner.py` | `min_meetings_per_person` yalnızca gelenlerin en küçüğü |
+| `engine/state.py` | `moved_participants()` gelmeyenleri saymıyor |
+| `plan_runner.unmatched_names` | Gelmeyen "hiç eşleşmedi" listesine girmiyor |
+| `plan_runner.seat_changes` | Gelmeyenin "masadan kalktı" satırı yok |
+
+`absentees_of()` bu kümeyi **yalnızca minimum değişim modunda** dolduruyor.
+Normal bir planın derdi katılımcıların tamamı: check-in başlamamış olabilir
+ve orada kimseyi hesaptan düşmek yanlış olurdu.
+
+Ölçüm — aynı veri, aynı plan:
+
+| | Önce | Sonra |
+|---|---|---|
+| En az görüşme | 0 tur | 3 tur |
+| Hiç eşleşmeyen | 5 kişi | yok |
+| Yeri değişen | 9 kişi (32 satır) | 4 kişi (10 satır) |
+
+Aynı senaryo yeniden çalıştırıldığında panel *"Kimsenin yeri değişmedi"*
+diyor — 9.8'in sözü ilk kez okunabilir bir sayıyla görünüyor.
+
+### Derin bağlantı açılışta korunuyor
+
+Yönlendirici açılışta `SplashScreen`'e gidiyor, oturum çözülünce oradan
+profil sihirbazına atlıyordu — istenen adres yolda düşüyordu. Web'de
+herhangi bir sayfada F5'e basan kullanıcı sihirbazda buluyordu kendini.
+
+İstenen adres artık yönlendiricinin kapanışında bekliyor (`pending`) ve
+oturum çözülünce oraya devam ediliyor. Sorgu dizesi de saklanıyor:
+`matchedLocation` onu taşımıyor ve süzgeçli bir liste yenilendiğinde
+süzgecini kaybederdi.
+
+Adres **bir kez** kullanılıp bırakılıyor; sonraki gezinmelerde geri
+sürüklemesi olmamalı. Oturumu olmayan birinin istediği adres hiç
+tutulmuyor: giriş yapan başka biri olabilir ve önceki kullanıcının
+bağlantısına düşerdi.
+
+## Aşama 12 — Sağlamlaştırma
+
+Dört parça: boş durum taraması, hata durumu taraması, tek komutluk demo
+verisi, devir teslim dokümanı.
+
+### Boş ve üç durum taraması
+
+Ekranların tamamı tarandı. Üç durum eksiksizdi; boş durum mesajları da
+**bağlama duyarlı** çıktı: süzgeçli listede *"Bu süzgeçte başvuru yok"*,
+süzgeçsizde *"Bu etkinliğe henüz başvuru yok"*. Katılımcısız bir etkinlik
+açılıp ekranlar tek tek gezildi.
+
+Tek tutarsızlık uyarı panelindeydi: kabul edilmiş katılımcı yokken düğme
+kapalı olmasına rağmen altında *"Bunlar engel değil; yine de
+çalıştırabilirsin"* yazıyordu. M6 uyarıların engel olmadığını söylüyor ama
+çalıştıracak katılımcı yoksa çalıştıracak bir şey de yok. Cümle artık
+`canRun`'a bakıyor.
+
+### Hata yolları
+
+**Ağ hatası oturumu silmiyordu.** Açılışta `/auth/me` başarısız olunca
+jetonlar siliniyordu — sunucuya ulaşılamaması da dahil. Etkinlik günü
+şebekesi zayıf olan katılımcı oturumunu ve giriş kodunu kaybederdi.
+Jeton artık **yalnızca 401'de** siliniyor; ulaşılamama bir kimlik kararı
+değil.
+
+**Yenileme tutmayınca uygulama haberdar olmuyordu.** `ApiClient` sessiz
+yenileme başarısız olduğunda jetonu siliyor ama kimseye söylemiyordu:
+uygulama hâlâ oturumu açık sanıyor, her istek 401 dönüyor, kullanıcı her
+ekranda hata görüp çıkışı elle bulmak zorunda kalıyordu. `onSessionLost`
+geri çağrısı eklendi; `AuthController.sessionExpired()` durumu düşürüyor ve
+yönlendirme giriş ekranına alıyor.
+
+Sıra önemli: çağrı bir araya giricinin içinden geliyor ve açılışta `build`
+sürüyor olabilir, o sırada duruma yazmak hata. `Future.microtask` ile
+sonraki döngüye bırakıldı.
+
+**`AppConfig.isConfigured` testleri kilitliyordu.** Derleme zamanı sabiti
+olduğu için `AuthController.build()` testlerde daha ilk satırda çıkıyor ve
+açılış hata yolları hiç çalışmıyordu. `apiConfiguredProvider` eklendi —
+üretimde aynı sabiti okuyor, testte geçersiz kılınabiliyor.
+
+**Kuyrukta takılan iş sessizdi.** Arka plan işçisi çalışmıyorsa plan
+"Sıraya alındı" deyip orada kalıyor: hata yok, ilerleme de yok. En sık
+atlanan kurulum adımı bu. 45 saniye sonra ekran sebebini söylüyor
+(`PlanSummary.isStalled`). Eşik cömert: 200 kişilik gerçek bir çalıştırma
+birkaç saniye sürüyor.
+
+**Veritabanı kaybolunca istek sonsuza kadar bekliyordu.** Postgres
+konteyneri yeniden başladıktan sonra ekranlar dönmeye devam etti;
+`/health/ready` çalışıyordu ama havuzdaki bağlantılar cevapsızdı.
+`pool_pre_ping` **kapanmış** bağlantıyı yakalıyor, kara deliğe düşmüş olanı
+değil: paketler cevapsız kalıyor ve soket işletim sisteminin sınırına kadar
+bekliyor. `DB_TIMEOUT_SECONDS` (varsayılan 30) eklendi — istek düzgün bir
+hatayla bitiyor ve ekran "tekrar dene" gösteriyor.
+
+Bu tarayıcıda gerçekten yaşandı ve önce uygulama hatası sanıldı; belirti
+tablosuna yazıldı.
+
+### Demo verisi HTTP üzerinden
+
+`backend/scripts/demo.py` sahte bir etkinliği baştan sona kuruyor: kayıt,
+profiller, başvurular, onaylar, görüşme talepleri, eşleştirme, yayınlama.
+
+Veritabanına doğrudan yazmak daha hızlı olurdu; **bilerek uçlardan
+geçiliyor.** Amaç fixture üretmek değil, kurulumun gerçekten çalıştığını
+kanıtlamak: sonuna kadar gidiyorsa veritabanı, migration'lar, Redis, arka
+plan işçisi ve motor birlikte çalışıyor demektir. İş kuralı da ikinci kez
+yazılmamış oluyor.
+
+Otomatik onay bilerek kapatılıyor (varsayılan açık): duman testi onay
+uçlarından da geçsin.
+
+Her çalıştırma yeni bir etkinlik açıyor, organizatör hesabı ilk seferde
+oluşturulup sonra tekrar kullanılıyor. Var olan veriye dokunmuyor.
+
+### Devir teslim dokümanı
+
+`docs/devir-teslim.md`. README'yi tekrarlamıyor: oradaki soru "nasıl
+çalıştırılır", buradaki "kod nerede, neden öyle, neye dokunurken dikkat".
+
+İçinde bir **belirti → sebep** tablosu var. Devralan kişinin ilk haftada
+karşılaşacağı şeyler orada: kuyrukta kalan plan, port kapan konteyner, WSL
+yönlendirmesi, ASCII olmayan `alembic.ini`, `MissingGreenlet`.

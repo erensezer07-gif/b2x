@@ -405,7 +405,11 @@ class _ApplyButton extends StatelessWidget {
           Text(
             status == RegistrationStatus.pending
                 ? 'Başvurun organizatörün onayını bekliyor.'
-                : 'Başvurun kabul edildi. Planın yayınlandığında masan burada görünecek.',
+                // Planın hazır olup olmadığını bu ekran bilmiyor: kapı
+                // sunucuda, cevabı "Oturma planım" veriyor. Burada söz vermek
+                // yanlış olurdu — plan yayına alındıktan sonra da "yayınlanınca
+                // görünecek" yazıyordu.
+                : 'Başvurun kabul edildi.',
             style: theme.textTheme.bodyMedium,
             textAlign: TextAlign.center,
           ),

@@ -133,7 +133,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
           _Checklist(check: check),
           if (check.warnings.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.md),
-            _Warnings(warnings: check.warnings),
+            _Warnings(warnings: check.warnings, canRun: check.canRun),
           ],
           const SizedBox(height: AppSpacing.lg),
           _RunButton(
@@ -244,11 +244,16 @@ class _Checklist extends StatelessWidget {
   }
 }
 
-/// Uyarılar — engel değil (M6).
+/// Uyarılar (M6).
+///
+/// M6 uyarıların engel olmadığını söylüyor — ama kabul edilmiş katılımcı ya da
+/// masa yoksa çalıştıracak bir şey de yok ve sunucu zaten reddediyor. O
+/// durumda "yine de çalıştırabilirsin" demek kapalı düğmeyle çelişiyordu.
 class _Warnings extends StatelessWidget {
-  const _Warnings({required this.warnings});
+  const _Warnings({required this.warnings, required this.canRun});
 
   final List<MatchingWarning> warnings;
+  final bool canRun;
 
   @override
   Widget build(BuildContext context) {
@@ -283,7 +288,9 @@ class _Warnings extends StatelessWidget {
               ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Bunlar engel değil; yine de çalıştırabilirsin.',
+              canRun
+                  ? 'Bunlar engel değil; yine de çalıştırabilirsin.'
+                  : 'Eşleştirmenin başlaması için önce bunlar giderilmeli.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colors.onSurfaceVariant,
               ),
@@ -405,6 +412,17 @@ class _PlanCard extends StatelessWidget {
                     : colors.onSurfaceVariant,
               ),
             ),
+            // Kuyrukta takılı kalan plan sessizce bekliyor: hata yok, ilerleme
+            // de yok. Sebebi neredeyse her zaman arka plan işçisinin çalışmıyor
+            // olması ve bunu bilmeyen biri saatlerce bekleyebilir.
+            if (plan.isStalled) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Beklenenden uzun sürüyor. Arka plan işçisi çalışmıyorsa '
+                'plan kuyrukta bekler.',
+                style: theme.textTheme.bodySmall?.copyWith(color: colors.error),
+              ),
+            ],
             if (plan.hasResult) ...[
               const Divider(height: AppSpacing.lg),
               _Summary(plan: plan),

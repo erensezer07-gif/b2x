@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Assignment, Plan, PlanStatus
 from app.services.reasons import (
     MAX_REASONS,
+    MUTUAL_REQUEST,
     SAME_CITY,
     SAME_SECTOR,
     SHARED_CATEGORY,
@@ -29,6 +30,7 @@ from app.services.reasons import (
 )
 from engine.scoring import CATEGORY, CITY, SECTOR, SIMILARITY_PENALTY, SUPPLY_DEMAND
 from tests.test_matching_api import run_plan, seed_event
+from tests.test_meeting_request_api import crowd, participants, request_meeting, row
 from tests.test_registration_api import complete_profile, open_event, sign_up, use
 
 
@@ -620,3 +622,48 @@ async def test_venue_is_404_without_a_layout(
 
     # Kayıtlar açılmadığı için başvurulamıyor; kapı zaten katılımcılığa bakıyor.
     assert (await client.get(f"/events/{event['id']}/venue")).status_code == 404
+
+
+async def test_a_mutual_request_is_the_first_reason(
+    client: AsyncClient, unique_email: Callable[[], str], session: AsyncSession
+) -> None:
+    """Karşılıklı talep gerekçe listesinin en üstünde (M8 + M9).
+
+    `build_reasons` bunu baştan biliyordu ama hiçbir çağıran bayrağı
+    göndermiyordu: birim testleri geçiyor, uçta hiç görünmüyordu. Tarayıcı
+    turunda yakalandı — bu test uçtan uca bakıyor.
+    """
+    _organiser, event, tokens = await crowd(
+        client, unique_email, people=4, tables=1, seats=4, slots=1
+    )
+
+    use(client, tokens[0])
+    other = row(await participants(client, event), "Katılımcı 1")["registration_id"]
+    assert (await request_meeting(client, event, other)).status_code == 201
+
+    use(client, tokens[1])
+    me = row(await participants(client, event), "Katılımcı 0")["registration_id"]
+    assert (await request_meeting(client, event, me)).status_code == 201
+
+    # Tek taraflı bir talep de var: gerekçelerde hiç görünmemeli.
+    use(client, tokens[2])
+    assert (await request_meeting(client, event, me)).status_code == 201
+
+    use(client, _organiser)
+    plan = await run_plan(client, session, event["id"])
+    published = await client.post(f"/events/{event['id']}/plans/{plan['id']}/publish")
+    assert published.status_code == 200, published.text
+
+    use(client, tokens[0])
+    body = (await client.get(f"/events/{event['id']}/my-plan")).json()
+    kinds = {
+        mate["full_name"]: [reason["kind"] for reason in mate["reasons"]]
+        for slot in body["slots"]
+        for mate in slot["tablemates"]
+    }
+
+    assert kinds, "Katılımcı hiçbir turda oturmamış."
+    assert kinds["Katılımcı 1"][0] == MUTUAL_REQUEST
+    for name, items in kinds.items():
+        if name != "Katılımcı 1":
+            assert MUTUAL_REQUEST not in items, f"{name} tek taraflı talebi gösteriyor."

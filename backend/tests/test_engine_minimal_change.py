@@ -112,6 +112,26 @@ def test_absentees_are_not_reported_as_unmatched() -> None:
     assert not (set(second.summary.participants_below_target) & absentees)
 
 
+def test_the_minimum_ignores_absentees() -> None:
+    """Asgari tur sayısı gelmeyenlerin sıfırına düşmemeli (M7).
+
+    Düşseydi check-in sonrası her planda "en az görüşme alan: 0 tur" yazardı
+    ve panelin en önemli sayısı hiçbir şey anlatmazdı.
+    """
+    original = base_scenario()
+    first = run_matching(original)
+
+    absentees = frozenset(range(10))
+    rerun = replace(original, previous_plan=first.assignments, absent_participants=absentees)
+    second = run_matching(rerun)
+
+    seated = Counter(assignment.participant for assignment in second.assignments)
+    present = set(range(len(original.participants))) - absentees
+
+    assert second.summary.min_meetings_per_person == min(seated[person] for person in present)
+    assert second.summary.min_meetings_per_person > 0
+
+
 def test_summary_reports_who_moved() -> None:
     """Organizatöre "kimin yeri değişti" gösterilecek (9.8, M10)."""
     original = base_scenario()
@@ -122,6 +142,28 @@ def test_summary_reports_who_moved() -> None:
     )
     second = run_matching(rerun)
     assert second.summary.moved_participants > 0
+
+
+def test_absentees_do_not_count_as_moved() -> None:
+    """Gelmeyenin masadan kalkması "yer değişikliği" değil (M10).
+
+    Sayılsaydı 9.8'in ölçüsü gelmeyen kalabalığıyla şişerdi: gerçekten
+    kıpırdayan avuç dolusu kişi görünmez olurdu.
+    """
+    original = base_scenario()
+    first = run_matching(original)
+
+    absentees = frozenset(range(10))
+    rerun = replace(original, previous_plan=first.assignments, absent_participants=absentees)
+    second = run_matching(rerun)
+
+    # Gelmeyenlerin hepsi ilk planda oturuyordu, yani hepsinin yeri "değişti".
+    # Sayaç yine de yalnızca gelenleri saymalı.
+    seated_before = {assignment.participant for assignment in first.assignments}
+    assert absentees <= seated_before
+
+    disturbed = moved_participants(first, second) - absentees
+    assert second.summary.moved_participants == len(disturbed)
 
 
 # --- Dondurulmuş slotlar ---------------------------------------------------

@@ -15,8 +15,12 @@ final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
 class ProfileController extends AsyncNotifier<Profile> {
   ProfileRepository get _repository => ref.read(profileRepositoryProvider);
 
+  /// `read` değil **`watch`**: depo `apiClientProvider`'ı izliyor, o da oturum
+  /// değişince tazeleniyor. Bağımlılık kurulmazsa bu denetleyici uygulama
+  /// boyunca yaşar ve bir sonraki kullanıcıya öncekinin profilini gösterir —
+  /// `AuthController._dropUserCaches` tam olarak bu zincire güveniyor.
   @override
-  Future<Profile> build() => _repository.load();
+  Future<Profile> build() => ref.watch(profileRepositoryProvider).load();
 
   /// Bir adımı kaydeder.
   ///

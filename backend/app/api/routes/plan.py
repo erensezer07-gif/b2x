@@ -39,6 +39,7 @@ from app.services.plan_editing import (
     set_pinned,
 )
 from app.services.plan_runner import (
+    absentees_of,
     assignment_count,
     create_queued_plan,
     request_counts,
@@ -77,6 +78,7 @@ async def read_matching_check(event: OwnedEvent, session: SessionDep) -> Matchin
 
 async def _to_response(session: SessionDep, plan: Plan) -> PlanSummaryResponse:
     satisfied, total = await request_counts(session, plan.event_id, plan.id)
+    absentees = await absentees_of(session, plan)
     return PlanSummaryResponse(
         id=plan.id,
         version=plan.version,
@@ -92,7 +94,8 @@ async def _to_response(session: SessionDep, plan: Plan) -> PlanSummaryResponse:
         runtime_ms=plan.runtime_ms,
         assignment_count=await assignment_count(session, plan.id),
         participant_count=await seated_participant_count(session, plan.id),
-        unmatched=await unmatched_names(session, plan.event_id, plan.id),
+        unmatched=await unmatched_names(session, plan.event_id, plan.id, absentees=absentees),
+        absent_count=len(absentees),
         satisfied_requests=satisfied,
         total_requests=total,
         unmet_requests=[
@@ -328,7 +331,13 @@ async def read_plan_changes(
     if plan.previous_plan_id is None:
         return PlanChangesResponse(previous_plan_id=None, changes=[], moved_people=0)
 
-    rows = await seat_changes(session, event.id, plan.id, plan.previous_plan_id)
+    rows = await seat_changes(
+        session,
+        event.id,
+        plan.id,
+        plan.previous_plan_id,
+        absentees=await absentees_of(session, plan),
+    )
     return PlanChangesResponse(
         previous_plan_id=plan.previous_plan_id,
         changes=[

@@ -20,8 +20,12 @@ import 'api_exception.dart';
 /// Olmasaydı her istek ayrı bir yenileme tetikler ve sunucuya gereksiz yük
 /// binerdi.
 class ApiClient {
-  ApiClient({required String baseUrl, required TokenStorage tokenStorage})
-      : _tokenStorage = tokenStorage,
+  ApiClient({
+    required String baseUrl,
+    required TokenStorage tokenStorage,
+    void Function()? onSessionLost,
+  })  : _tokenStorage = tokenStorage,
+        _onSessionLost = onSessionLost,
         _dio = Dio(_optionsFor(baseUrl)),
         _refreshDio = Dio(_optionsFor(baseUrl)) {
     _dio.interceptors.add(
@@ -30,6 +34,9 @@ class ApiClient {
   }
 
   final TokenStorage _tokenStorage;
+
+  /// Sessiz yenileme de tutmadığında çağrılır — oturum gerçekten bitti.
+  final void Function()? _onSessionLost;
   final Dio _dio;
 
   /// Yenileme isteği kendi istemcisiyle gidiyor: araya girici ona da takılsaydı
@@ -81,6 +88,11 @@ class ApiClient {
     final refreshed = await _refreshSession();
     if (!refreshed) {
       await _tokenStorage.clear();
+      // Jeton silindi ama uygulama hâlâ oturumu açık sanıyor. Haber
+      // verilmezse kullanıcı her ekranda hata görür ve çıkışı elle bulmadan
+      // hiçbir şey yapamaz — yenileme jetonunun ömrü dolduğunda olan tam
+      // olarak bu.
+      _onSessionLost?.call();
       return handler.next(error);
     }
 

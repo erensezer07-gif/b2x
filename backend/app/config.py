@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     postgres_host: str
     postgres_port: int = 5432
 
+    # Veritabanı bağlantısı ve sorgusu için üst sınır.
+    #
+    # `pool_pre_ping` kapanmış bağlantıyı yakalıyor ama **kara deliğe düşmüş**
+    # bağlantıyı yakalayamıyor: veritabanı kaybolduğunda (konteyner yeniden
+    # başladı, ağ koptu) paketler cevapsız kalıyor ve soket işletim sisteminin
+    # zaman aşımına kadar bekliyor. O sırada uygulama hata da vermiyor, cevap
+    # da: kullanıcı sonsuz dönen bir göstergeye bakıyor. Sınır konunca istek
+    # düzgün bir hatayla biter ve ekran "tekrar dene" gösterir.
+    db_timeout_seconds: int = 30
+
     # --- Redis ---
     redis_host: str
     redis_port: int = 6379

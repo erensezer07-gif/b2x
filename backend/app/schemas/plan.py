@@ -73,8 +73,13 @@ class PlanSummaryResponse(BaseModel):
     participant_count: int
 
     # *"Hiç eşleşmemiş kişi var mı, varsa kimler"* (M7). Kabul edilmiş ama
-    # hiçbir turda masaya oturmamış kişiler.
+    # hiçbir turda masaya oturmamış kişiler. Gelmeyenler burada değil.
     unmatched: list[str]
+
+    # Hesabın dışında bırakılan kişi sayısı (M7). Yalnızca minimum değişim
+    # modunda üretilmiş planlarda sıfırdan büyük. Ayrı duruyor ki organizatör
+    # "kimse oturmamış" ile "gelmemiş" arasını ayırabilsin.
+    absent_count: int = 0
 
     # *"Karşılanan talep sayısı / toplam talep"* (M7).
     satisfied_requests: int

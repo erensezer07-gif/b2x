@@ -31,6 +31,7 @@ Map<String, dynamic> planJson({
   bool withSummary = true,
   String status = 'draft',
   List<String> unmatched = const [],
+  String createdAt = '2026-08-06T14:30:00Z',
 }) {
   return {
     'id': 3,
@@ -38,7 +39,7 @@ Map<String, dynamic> planJson({
     'status': status,
     'job_status': jobStatus,
     'job_error': jobError,
-    'created_at': '2026-08-06T14:30:00Z',
+    'created_at': createdAt,
     'published_at': status == 'published' ? '2026-08-06T15:00:00Z' : null,
     'seed': 42,
     'total_meetings': withSummary ? 96 : null,
@@ -71,6 +72,39 @@ void main() {
 
     test('tanınmayan durum arayüzü çökertmiyor', () {
       expect(JobStatus.fromKey('gelecekte_eklenen'), JobStatus.queued);
+    });
+
+    test('kuyrukta takılan iş bir süre sonra fark ediliyor', () {
+      // Hata yok, ilerleme de yok: sebebi neredeyse her zaman arka plan
+      // işçisinin çalışmıyor olması. Söylenmezse kullanıcı saatlerce bekler.
+      final stuck = PlanSummary.fromJson(
+        planJson(
+          jobStatus: 'queued',
+          withSummary: false,
+          createdAt: DateTime.now().toUtc().subtract(const Duration(minutes: 5)).toIso8601String(),
+        ),
+      );
+
+      expect(stuck.isStalled, isTrue);
+    });
+
+    test('yeni başlamış iş takılmış sayılmıyor', () {
+      final fresh = PlanSummary.fromJson(
+        planJson(
+          jobStatus: 'queued',
+          withSummary: false,
+          createdAt: DateTime.now().toUtc().toIso8601String(),
+        ),
+      );
+
+      expect(fresh.isStalled, isFalse);
+    });
+
+    test('bitmiş iş takılmış sayılmıyor', () {
+      // Eski ama tamamlanmış bir plan uyarı göstermemeli.
+      final old = PlanSummary.fromJson(planJson(createdAt: '2026-01-01T09:00:00Z'));
+
+      expect(old.isStalled, isFalse);
     });
   });
 

@@ -458,6 +458,16 @@ Planın genel sağlığı tek bakışta görünmeli:
 - Karşılanan talep sayısı / toplam talep
 - **Karşılanmayan talepler** — ayrıntısı M9'da; karşılıklı olanlar vurgulu, her satırdan ilgili tura gidilir
 
+**Bu sayılar kimin üzerinden hesaplanır.** Panel planın *başarısını* ölçüyor,
+dolayısıyla yalnızca **planda yeri olması beklenen kişileri** sayar. Check-in
+sonrası minimum değişim modunda üretilmiş bir planda gelmeyenler hesabın
+dışındadır: gelmemiş birinin sıfır görüşmesi motorun başarısızlığı değil.
+
+Gelmeyenler yok sayılmıyor, **ayrı yazılıyor**: *"5 kişi gelmedi."* İkisi
+karışırsa panelin en önemli sayısı — en az görüşme alan kişi — gelmeyenlerin
+sıfırına düşer ve hiçbir şey anlatmaz; "hiç eşleşmemiş kişiler" listesi de elle
+yerleştirilmesi gereken insanlar gibi okunur, oysa o kişiler salonda değil.
+
 #### Elle düzeltme — takas yöntemi
 
 Sürükle-bırak yerine takas kullanılır: bir kişiye dokunulur, sonra ikinci kişiye dokunulur, yerleri değişir. Mobilde çok daha güvenilir çalışır ve aynı işi görür.
@@ -582,6 +592,12 @@ Bunun yerine motor, bir önceki versiyonu başlangıç noktası olarak alır ve 
 **İkinci kural:** başlamış veya bitmiş slotlara dokunulmaz. Sadece gelecek slotlar yeniden hesaplanır.
 
 Yeni versiyon organizatöre gösterilir, **kimin yeri değişti** listelenir, organizatör onaylayınca yayına geçer.
+
+Listede **gelmeyenlerin masadan kalkması yer almaz.** Organizatör onların
+gelmediğini zaten biliyor ve her biri her tur için bir satır üretiyor; gerçekten
+yeri değişen avuç dolusu kişi aralarında kayboluyor. Liste yalnızca **gelmiş
+kişilerin** değişikliklerini taşır, "kaç kişinin yeri değişti" sayısı da onları
+sayar.
 
 ---
 

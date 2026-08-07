@@ -75,3 +75,17 @@ def test_secrets_are_not_exposed_in_string_form(monkeypatch: pytest.MonkeyPatch)
     dumped = repr(settings)
     assert "parola" not in dumped
     assert "gizli" not in dumped
+
+
+def test_database_timeout_is_configurable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Veritabanı kaybolduğunda istek sonsuza kadar beklememeli.
+
+    `pool_pre_ping` kapanmış bağlantıyı yakalıyor ama cevapsız kalanı değil;
+    üst sınır bu yüzden var. Değer ortamdan geliyor: farklı kurulumlarda
+    farklı olabilir.
+    """
+    default = _build_settings(monkeypatch)
+    assert default.db_timeout_seconds == 30
+
+    tuned = _build_settings(monkeypatch, DB_TIMEOUT_SECONDS="5")
+    assert tuned.db_timeout_seconds == 5

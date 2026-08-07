@@ -161,12 +161,33 @@ async def seated_participant_count(session: AsyncSession, plan_id: int) -> int:
     return result.scalar_one()
 
 
-async def unmatched_names(session: AsyncSession, event_id: int, plan_id: int) -> list[str]:
+async def absentees_of(session: AsyncSession, plan: Plan) -> set[int]:
+    """Bu planın hesabından düşülecek kişiler (M7).
+
+    Yalnızca **minimum değişim modunda** üretilmiş planlar için dolu:
+    o plan zaten gelmeyenler çıkarılarak kuruldu, dolayısıyla onların
+    oturmaması bir başarısızlık değil. Normal bir planda herkes sayılır —
+    check-in başlamamış olabilir ve o planın derdi katılımcıların tamamı.
+    """
+    if not plan.minimal_change:
+        return set()
+    from app.services.attendance import absent_registration_ids
+
+    return set(await absent_registration_ids(session, plan.event_id))
+
+
+async def unmatched_names(
+    session: AsyncSession, event_id: int, plan_id: int, *, absentees: set[int] | None = None
+) -> list[str]:
     """*"Hiç eşleşmemiş kişi var mı, varsa kimler"* (M7).
 
     Kabul edilmiş ama planın hiçbir turunda masaya oturmamış kişiler. Özet
     panelin en can alıcı ikinci bilgisi: organizatör bu isimleri görüp elle
     yerleştirebilir.
+
+    **Gelmeyenler listeye girmiyor.** Girselerdi ekran organizatöre salonda
+    olmayan insanları boş sandalyelere oturtmayı önerirdi. Onlar ayrı bir
+    satırda sayılıyor.
     """
     seated = select(Assignment.registration_id).where(Assignment.plan_id == plan_id)
     result = await session.execute(
@@ -180,7 +201,12 @@ async def unmatched_names(session: AsyncSession, event_id: int, plan_id: int) ->
         )
         .order_by(Registration.id)
     )
-    return [name or f"#{registration_id}" for name, registration_id in result.all()]
+    skip = absentees or set()
+    return [
+        name or f"#{registration_id}"
+        for name, registration_id in result.all()
+        if registration_id not in skip
+    ]
 
 
 async def _together(session: AsyncSession, plan_id: int) -> set[tuple[int, int]]:
@@ -351,15 +377,22 @@ class SeatChange:
 
 
 async def seat_changes(
-    session: AsyncSession, event_id: int, plan_id: int, previous_plan_id: int
+    session: AsyncSession,
+    event_id: int,
+    plan_id: int,
+    previous_plan_id: int,
+    *,
+    absentees: set[int] | None = None,
 ) -> list[SeatChange]:
     """İki plan arasında yeri değişenler (M10).
 
     9.8'in sözü burada ölçülüyor: *"gerekmedikçe kimseyi kıpırdatma."*
     Organizatör listeyi görüp onaylıyor.
 
-    Gelmediği için çıkarılan kişiler de listede — organizatör onların
-    masadan kalktığını görmeli.
+    **Gelmeyenlerin masadan kalkması listede yok.** Organizatör onların
+    gelmediğini zaten biliyor ve her biri her tur için bir satır üretiyor;
+    dokuz kişilik bir denemede otuz iki satırın yirmi ikisi buydu ve
+    gerçekten kıpırdayan dört kişi aralarında kayboluyordu.
     """
 
     async def seats(target: int) -> dict[tuple[int, int], int]:
@@ -376,11 +409,12 @@ async def seat_changes(
     numbers = await _table_numbers(session, event_id)
     names = await _names(session, event_id)
 
+    skip = absentees or set()
     changes = []
     for key in sorted(set(before) | set(after)):
         registration_id, slot_number = key
         old, new = before.get(key), after.get(key)
-        if old == new:
+        if old == new or registration_id in skip:
             continue
         changes.append(
             SeatChange(

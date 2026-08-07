@@ -15,7 +15,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Assignment, AttendanceStatus, Registration
+from app.models import Assignment, AttendanceStatus, Profile, Registration, User
 from app.services.attendance import started_slots
 from app.services.schedule import build_schedule
 from tests.test_matching_api import run_plan
@@ -522,12 +522,53 @@ async def test_changes_are_reported(
     changes = (await client.get(f"/events/{event['id']}/plans/{second_id}/changes")).json()
 
     assert changes["previous_plan_id"] == first["id"]
-    assert changes["moved_people"] > 0, "Gelmeyen iki kişi masadan kalkmış olmalı."
     for row in changes["changes"]:
         assert row["name"]
         assert row["slot_number"] >= 1
         # En az biri değişmiş olmalı; ikisi aynıysa satır listeye girmemeliydi.
         assert row["before"] != row["after"]
+
+
+async def test_absentees_are_not_listed_as_moved(
+    client: AsyncClient, unique_email: Callable[[], str], session: AsyncSession
+) -> None:
+    """Gelmeyenin masadan kalkması "yer değişikliği" değil (M10).
+
+    Tarayıcı turunda görüldü: dokuz kişilik bir denemede otuz iki satırın
+    yirmi ikisi gelmeyenlerin "masadan kalktı" satırıydı ve gerçekten
+    kıpırdayan dört kişi aralarında kayboluyordu.
+    """
+    from app.services.plan_runner import execute_plan
+
+    organiser, event, tokens = await crowd(client, unique_email, people=6, tables=3, seats=2)
+    use(client, organiser)
+    first = await run_plan(client, session, event["id"])
+    await client.post(f"/events/{event['id']}/plans/{first['id']}/publish")
+
+    await mark_present(client, event, tokens, [0, 1, 2, 3])
+
+    use(client, organiser)
+    started = await client.post(f"/events/{event['id']}/plans", json={"minimal_change": True})
+    second_id = started.json()["id"]
+    await execute_plan(session, second_id)
+
+    absent_ids = set(
+        (
+            await session.execute(
+                select(Registration.id).where(
+                    Registration.event_id == event["id"],
+                    Registration.attendance == AttendanceStatus.ABSENT,
+                )
+            )
+        ).scalars()
+    )
+    assert absent_ids, "İki kişi gelmemiş olmalıydı."
+
+    changes = (await client.get(f"/events/{event['id']}/plans/{second_id}/changes")).json()
+    listed = {row["registration_id"] for row in changes["changes"]}
+
+    assert not (listed & absent_ids), "Gelmeyen biri 'yeri değişti' listesinde."
+    assert changes["moved_people"] == len(listed)
 
 
 async def test_the_first_plan_has_no_changes(
@@ -600,3 +641,65 @@ async def test_minimal_change_moves_few_people(
         f"{present_count} gelen kişiden {len(moved)}'inin yeri değişti; "
         "minimum değişim modu çalışmıyor olabilir."
     )
+
+
+async def test_the_summary_does_not_count_absentees(
+    client: AsyncClient, unique_email: Callable[[], str], session: AsyncSession
+) -> None:
+    """Özet paneli gelmeyenleri saymamalı (M7).
+
+    Tarayıcı turunda dokuz kişilik bir denemede panel "en az görüşme 0",
+    "hiç eşleşmeyen 5 kişi" diyordu; beşi de gelmeyendi. Üstelik ekran
+    onları boş sandalyelere oturtmayı öneriyordu.
+    """
+    from app.services.plan_runner import execute_plan
+
+    organiser, event, tokens = await crowd(client, unique_email, people=6, tables=3, seats=2)
+    use(client, organiser)
+    first = await run_plan(client, session, event["id"])
+    await client.post(f"/events/{event['id']}/plans/{first['id']}/publish")
+
+    await mark_present(client, event, tokens, [0, 1, 2, 3])
+
+    use(client, organiser)
+    started = await client.post(f"/events/{event['id']}/plans", json={"minimal_change": True})
+    second_id = started.json()["id"]
+    await execute_plan(session, second_id)
+
+    absent_names = set(
+        (
+            await session.execute(
+                select(Profile.full_name)
+                .join(User, User.id == Profile.user_id)
+                .join(Registration, Registration.user_id == User.id)
+                .where(
+                    Registration.event_id == event["id"],
+                    Registration.attendance == AttendanceStatus.ABSENT,
+                )
+            )
+        ).scalars()
+    )
+    assert absent_names, "İki kişi gelmemiş olmalıydı."
+
+    plan = (await client.get(f"/events/{event['id']}/plans/{second_id}")).json()
+
+    assert plan["absent_count"] == len(absent_names)
+    assert not (set(plan["unmatched"]) & absent_names), "Gelmeyen 'hiç eşleşmedi' sayılmış."
+    assert plan["min_meetings_per_person"] > 0, "Asgari tur gelmeyenlerin sıfırına düşmüş."
+
+
+async def test_a_normal_plan_counts_everyone(
+    client: AsyncClient, unique_email: Callable[[], str], session: AsyncSession
+) -> None:
+    """Check-in başlamadan önceki planın derdi katılımcıların tamamı.
+
+    Gelmeyen kavramı yalnızca minimum değişim modunda anlamlı; normal bir
+    planda kimse hesabın dışında bırakılmaz.
+    """
+    organiser, event, _tokens = await crowd(client, unique_email, people=6, tables=3, seats=2)
+    use(client, organiser)
+    plan = await run_plan(client, session, event["id"])
+
+    body = (await client.get(f"/events/{event['id']}/plans/{plan['id']}")).json()
+
+    assert body["absent_count"] == 0

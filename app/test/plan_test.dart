@@ -11,10 +11,15 @@
 // * **Dokun-dokun takas.** Hangi dokunuşun ne yaptığı ekranın kendi mantığı;
 //   sunucu bunu bilmiyor.
 
+import 'package:b2x/core/api/api_client.dart';
+import 'package:b2x/core/auth/token_storage.dart';
 import 'package:b2x/core/theme/app_theme.dart';
+import 'package:b2x/features/events/event_controller.dart';
+import 'package:b2x/features/events/event_repository.dart';
 import 'package:b2x/features/events/models.dart';
 import 'package:b2x/features/events/plan_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Map<String, dynamic> _personJson({
@@ -497,7 +502,11 @@ void main() {
   });
 
   group('özet paneli', () {
-    PlanSummary plan({List<String> unmatched = const [], int requests = 0}) {
+    PlanSummary plan({
+      List<String> unmatched = const [],
+      int requests = 0,
+      int absent = 0,
+    }) {
       return PlanSummary.fromJson({
         'id': 3,
         'version': 2,
@@ -514,6 +523,7 @@ void main() {
         'assignment_count': 96,
         'participant_count': 24,
         'unmatched': unmatched,
+        'absent_count': absent,
         'satisfied_requests': requests > 0 ? 3 : 0,
         'total_requests': requests,
         'unmet_requests': <Map<String, dynamic>>[],
@@ -529,6 +539,22 @@ void main() {
       expect(find.text('4'), findsOneWidget);
       expect(find.text('96'), findsOneWidget);
       expect(find.text('24'), findsOneWidget);
+    });
+
+    testWidgets('gelmeyenler ayrı yazılıyor', (tester) async {
+      // M7: sayılar gelmeyenleri içermiyor ama onlar yok da sayılmıyor.
+      // Tarayıcı turunda panel "en az görüşme 0" ve "hiç eşleşmeyen 5 kişi"
+      // diyordu; beşi de gelmemişti.
+      await _pump(tester, PlanSummaryPanel(plan: plan(absent: 5)));
+
+      expect(find.text('5 kişi gelmedi'), findsOneWidget);
+      expect(find.text('Yukarıdaki sayılar onları içermiyor.'), findsOneWidget);
+    });
+
+    testWidgets('kimse eksik değilse gelmedi satırı çıkmıyor', (tester) async {
+      await _pump(tester, PlanSummaryPanel(plan: plan()));
+
+      expect(find.textContaining('gelmedi'), findsNothing);
     });
 
     testWidgets('hiç eşleşmeyenler isimle listeleniyor', (tester) async {
@@ -607,4 +633,94 @@ void main() {
       expect(find.text('Boş'), findsOneWidget);
     });
   });
+
+  group('takas sonrası tazeleme', () {
+    testWidgets('takas turu da özeti de tazeliyor', (tester) async {
+      // Tarayıcı turunda yakalandı: takas Ayşe ile Mehmet'i ayırdı, sunucuda
+      // karşılanan talep 3/3'ten 1/3'e düştü — ekran hâlâ 3/3 gösteriyordu.
+      // Özet paneli ve karşılanmayan talep listesi `planProvider`'dan geliyor;
+      // yalnızca `planSlotProvider` tazelenirse organizatör neyi bozduğunu
+      // göremez.
+      final repository = _RecordingRepository();
+      final container = ProviderContainer(
+        overrides: [eventRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+
+      const query = PlanQuery(4, 7);
+      await container.read(planProvider(query).future);
+      await container.read(planSlotProvider(const SlotQuery(4, 7, 1)).future);
+      expect(repository.planLoads, 1);
+
+      await container
+          .read(planEditActionsProvider(query))
+          .swap(slotNumber: 1, assignmentId: 11, targetAssignmentId: 12);
+
+      expect(repository.planLoads, 2);
+      expect(container.read(planProvider(query)).value?.satisfiedRequests, 1);
+    });
+  });
+}
+
+/// Ağa çıkmayan depo: yalnızca testin dokunduğu üç yöntem gerçek.
+///
+/// `ApiClient` kurulabiliyor ama hiç kullanılmıyor — alt sınıf her çağrıyı
+/// kendi içinde karşılıyor.
+class _RecordingRepository extends EventRepository {
+  _RecordingRepository()
+      : super(ApiClient(baseUrl: 'http://ornek', tokenStorage: TokenStorage()));
+
+  int planLoads = 0;
+
+  @override
+  Future<PlanSummary> loadPlan(int eventId, int planId) async {
+    planLoads++;
+    // İlk okumada talepler karşılanmış, takastan sonra değil.
+    return PlanSummary.fromJson({
+      'id': planId,
+      'version': 1,
+      'status': 'draft',
+      'job_status': 'done',
+      'job_error': null,
+      'created_at': '2026-08-06T14:30:00Z',
+      'published_at': null,
+      'seed': 42,
+      'total_meetings': 39,
+      'min_meetings_per_person': 4,
+      'average_table_score': 0.75,
+      'runtime_ms': 1714,
+      'assignment_count': 39,
+      'participant_count': 9,
+      'unmatched': <String>[],
+      'satisfied_requests': planLoads == 1 ? 3 : 1,
+      'total_requests': 3,
+      'unmet_requests': <Map<String, dynamic>>[],
+    });
+  }
+
+  @override
+  Future<SlotView> loadSlot(int eventId, int planId, int slotNumber) async {
+    return SlotView.fromJson({
+      'slot_number': slotNumber,
+      'tables': [_tableJson(id: 1, number: 1)],
+    });
+  }
+
+  @override
+  Future<SwapResult> swap({
+    required int eventId,
+    required int planId,
+    required int slotNumber,
+    required int assignmentId,
+    int? targetAssignmentId,
+    int? targetTableId,
+  }) async {
+    return SwapResult.fromJson({
+      'slot': {
+        'slot_number': slotNumber,
+        'tables': [_tableJson(id: 1, number: 1)],
+      },
+      'warnings': <Map<String, dynamic>>[],
+    });
+  }
 }

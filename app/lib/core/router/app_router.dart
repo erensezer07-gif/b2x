@@ -33,6 +33,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final eventsBranchKey = GlobalKey<NavigatorState>(debugLabel: 'events');
   final profileBranchKey = GlobalKey<NavigatorState>(debugLabel: 'profile');
 
+  // Açılışta istenen adres. Güvenli depo okunana kadar kimseyi yerleştiremiyoruz
+  // ve o sırada kullanıcı açılış ekranına gönderiliyor; istenen adres burada
+  // bekliyor, oturum çözülünce oraya devam ediliyor.
+  //
+  // Olmadığında: web'de herhangi bir sayfada sayfayı yenileyen kullanıcı
+  // profil sihirbazında buluyordu kendini. Mobilde adres çubuğu olmadığı için
+  // görünmüyor, ama web de hedef platform.
+  String? pending;
+
   return GoRouter(
     initialLocation: SplashScreen.routePath,
     refreshListenable: refreshOnAuthChange,
@@ -42,7 +51,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // Depo henüz okunmadı: kimseyi bir yere gönderme, açılışta bekle.
       if (session == null) {
-        return location == SplashScreen.routePath ? null : SplashScreen.routePath;
+        if (location == SplashScreen.routePath) return null;
+        // Sorgu dizesi de saklanıyor: `matchedLocation` onu taşımıyor.
+        pending = state.uri.toString();
+        return SplashScreen.routePath;
       }
 
       final atLogin = location == LoginScreen.routePath;
@@ -50,8 +62,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final atSplash = location == SplashScreen.routePath;
 
       if (session is! SignedIn) {
+        // Oturumu olmayan birinin istediği adres tutulmuyor: giriş yapan
+        // başka biri olabilir ve önceki kullanıcının bağlantısına düşerdi.
+        pending = null;
         return atLogin || atRegister ? null : LoginScreen.routePath;
       }
+
+      // Açılışta bir adres bekliyorsa oraya devam. Bir kez kullanılıp
+      // bırakılıyor: sonraki gezinmelerde geri sürüklemesi olmamalı.
+      final resume = pending;
+      pending = null;
+      if (atSplash && resume != null) return resume;
+
       // Oturum açıkken giriş kapısında durmanın anlamı yok. Profil sihirbazı
       // ilk durak: profil eksikse orada kalınır, tamamsa özete geçer.
       return atLogin || atRegister || atSplash
