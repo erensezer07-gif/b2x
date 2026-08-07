@@ -30,4 +30,4 @@ USER b2x
 
 # Varsayılan olarak API çalışır; worker servisi bu komutu compose'ta değiştirir.
 # Adres ve port çalışma anında ortamdan okunur, imaja gömülmez.
-CMD ["sh", "-c", "exec python -m uvicorn app.main:app --host \"${API_HOST:-0.0.0.0}\" --port \"${API_PORT:-${PORT:-8000}}\""]
+CMD ["sh", "-c", "alembic upgrade head && exec python -m uvicorn app.main:app --host \"${API_HOST:-0.0.0.0}\" --port \"${API_PORT:-${PORT:-8000}}\""]
