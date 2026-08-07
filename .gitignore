@@ -49,8 +49,9 @@ uploads/
 .vscode/
 *.swp
 
-# --- Claude Code (kişisel yerel ayarlar, paylaşılmaz) ---
-.claude/settings.local.json
+# --- Claude ---
+.claude/
+CLAUDE.md
 
 # --- İşletim sistemi ---
 Thumbs.db

@@ -15,10 +15,19 @@ oluyor — Aşama 7'de uygulama katmanı aynı verilerle çalışacak.
 """
 
 import argparse
+import sys
 from collections import Counter
 from dataclasses import replace
 
 import numpy as np
+
+# Windows konsolunda Unicode harfleri/işaretlerinin sorunsuz yazılması için:
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 from engine.rules import find_violations
 from engine.runner import RunTrace, run_matching_with_trace
@@ -55,6 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--talep", type=int, default=150, help="görüşme talebi sayısı")
     parser.add_argument(
+        "--karsilikli-talep-orani",
+        type=float,
+        default=0.0,
+        help="görüşme taleplerindeki karşılıklı talep oranı (0.0-1.0)",
+    )
+    parser.add_argument(
         "--uyum", type=float, default=1.0, help="0.0 kimse kimseye uymaz, 1.0 eşleşme bol"
     )
     parser.add_argument("--esik", type=float, default=0.35, help="kalite eşiği")
@@ -62,7 +77,88 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deneme", type=int, default=100_000, help="yerel arama deneme sayısı")
     parser.add_argument("--tohum", type=int, default=42, help="rastgelelik tohumu")
     parser.add_argument("--ayakli", action="store_true", help="ayaklı masa kullan")
+    parser.add_argument(
+        "--sadece-dagilim",
+        action="store_true",
+        help="yalnızca ikili sinerji skoru dağılımını detaylı raporla ve çık",
+    )
     return parser
+
+
+DETAILED_PERCENTILES = (5, 10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 85, 90, 95, 99)
+CANDIDATE_THRESHOLDS = (0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.60, 0.70)
+
+
+def report_score_distribution(engine_input: EngineInput, current_threshold: float) -> None:
+    """İkili sinerji skorlarının ayrıntılı istatistiksel dağılımını raporlar."""
+    participant_count = len(engine_input.participants)
+    model = build_synergy_model(engine_input)
+    matrix = model.matrix
+    upper = matrix[np.triu_indices_from(matrix, k=1)]
+
+    print("=" * 74)
+    print("İKİLİ SİNERJİ SKORU DAĞILIM RAPORU")
+    print("=" * 74)
+    print(
+        f"  Senaryo: {participant_count} katılımcı · {engine_input.settings.weights.base_weight_total:.2f} temel ağırlık toplamı"
+    )
+    print(f"  {len(engine_input.requests)} görüşme talebi")
+
+    if upper.size == 0:
+        print("  İkili bulunamadı.")
+        return
+
+    zero_count = int(np.count_nonzero(upper == 0.0))
+    zero_pct = (zero_count / upper.size) * 100.0
+
+    print()
+    print("  GENEL İSTATİSTİKLER")
+    print(f"    Toplam İkili Sayısı : {upper.size}")
+    print(f"    Sıfır Skorlu İkili  : {zero_count} (%{zero_pct:.1f})")
+    print(f"    Ortalama Skor      : {upper.mean():.4f}")
+    print(f"    Standart Sapma      : {upper.std():.4f}")
+    print(f"    En Düşük / Yüksek   : {upper.min():.4f} / {upper.max():.4f}")
+
+    print()
+    print("  YÜZDELİK DAĞILIMI (PERCENTILES)")
+    p_vals = np.percentile(upper, DETAILED_PERCENTILES)
+    for p, val in zip(DETAILED_PERCENTILES, p_vals, strict=True):
+        marker = ""
+        if p == 50:
+            marker = "  <-- Medyan"
+        elif p == 70:
+            marker = "  <-- Önerilen eşik noktası (%30 en iyi ikili)"
+        print(f"    %{p:<2} : {val:.4f}{marker}")
+
+    print()
+    print("  ARALIK DAĞILIMI (HISTOGRAM)")
+    bins = [0.0, 0.05, 0.10, 0.20, 0.35, 0.50, 1.01]
+    labels = [
+        "[0.00 - 0.05)",
+        "[0.05 - 0.10)",
+        "[0.10 - 0.20)",
+        "[0.20 - 0.35)",
+        "[0.35 - 0.50)",
+        "[0.50 - 1.00]",
+    ]
+    counts, _ = np.histogram(upper, bins=bins)
+    max_bar = 30
+    max_count = max(counts) if len(counts) and max(counts) > 0 else 1
+
+    for label, count in zip(labels, counts, strict=True):
+        pct = (count / upper.size) * 100.0
+        bar_len = int(round((count / max_count) * max_bar))
+        bar = "#" * bar_len
+        print(f"    {label:<13} : {count:>6} (%{pct:>5.1f})  {bar}")
+
+    print()
+    print("  KALİTE EŞİĞİ SİMÜLASYONU")
+    for th in CANDIDATE_THRESHOLDS:
+        passing = int(np.count_nonzero(upper >= th))
+        pct = (passing / upper.size) * 100.0
+        is_current = "  (Mevcut Eşik)" if abs(th - current_threshold) < 1e-4 else ""
+        print(f"    Eşik {th:.2f} -> {passing:>6} ikili geçiyor (%{pct:>5.1f}){is_current}")
+    print()
 
 
 def _distribution(values: np.ndarray, digits: int = 3) -> str:
@@ -216,6 +312,7 @@ def main(argv: list[str] | None = None) -> int:
         sought_per_person=args.secim,
         compatibility=args.uyum,
         request_count=args.talep,
+        mutual_request_ratio=args.karsilikli_talep_orani,
         standing_tables=args.ayakli,
         seed=args.tohum,
     )
@@ -231,6 +328,10 @@ def main(argv: list[str] | None = None) -> int:
         weights=weights,
     )
     engine_input = build_scenario(spec, settings=settings)
+
+    if args.sadece_dagilim:
+        report_score_distribution(engine_input, args.esik)
+        return 0
 
     output, trace = run_matching_with_trace(engine_input)
     report(engine_input, output, trace, args.esik)

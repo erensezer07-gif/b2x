@@ -1,6 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Uygulama sunucuyla konuşuyor. Bu izin `src/debug` manifestinde de var
+         ama yalnızca hata ayıklama derlemesi için: burada olmazsa **release
+         APK'nın hiç ağ erişimi olmaz** ve her istek sebepsiz gibi görünen bir
+         hatayla düşer. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Girişte QR okuma (şartname M10). `mobile_scanner` kamerayı bu izinle
+         açıyor; izni kullanıcı reddederse check-in ekranı elle aramaya
+         düşüyor, çökmüyor. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Kamerası olmayan cihaz da uygulamayı kurabilmeli: check-in elle
+         yapılabiliyor, kamera bir kolaylık. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
     <application
-        android:label="b2x"
+        android:label="B2X"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

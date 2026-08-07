@@ -41,6 +41,21 @@ services:
       retries: 10
       start_period: 5s
 
+  migrate:
+    build:
+      context: backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
     build:
       # Göreli yollar depo kökünden (compose.yaml'ın bulunduğu yerden) çözülür.
@@ -61,6 +76,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       # Konteynerin kendi loopback adresi — makineye özel bir adres değil.
       test:
@@ -88,6 +105,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:

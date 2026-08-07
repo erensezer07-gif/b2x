@@ -70,6 +70,8 @@ class ScenarioSpec:
     compatibility: float = 1.0
 
     request_count: int = 0
+    # Görüşme talepleri içindeki karşılıklı talep oranı (0.0 = tamamen tek yönlü, 1.0 = tümü karşılıklı çiftler)
+    mutual_request_ratio: float = 0.0
     standing_tables: bool = False
     seed: int = 42
 
@@ -166,7 +168,30 @@ def _build_requests(spec: ScenarioSpec, rng: random.Random) -> tuple[MeetingRequ
         return ()
 
     seen: set[tuple[int, int]] = set()
-    requests = []
+    requests: list[MeetingRequestPair] = []
+
+    # Karşılıklı talepler (A -> B ve B -> A)
+    # Her çift 2 talep oluşturduğu için hedef çift sayısı: (request_count * ratio) // 2
+    target_mutual_pairs = 0
+    if spec.mutual_request_ratio > 0.0:
+        ratio = max(0.0, min(1.0, spec.mutual_request_ratio))
+        target_mutual_requests = int(round(spec.request_count * ratio))
+        target_mutual_pairs = target_mutual_requests // 2
+
+    # 1. Karşılıklı talep ikililerini oluştur
+    for _ in range(target_mutual_pairs * 10):
+        if len(requests) >= target_mutual_pairs * 2:
+            break
+        a = rng.randrange(spec.participant_count)
+        b = rng.randrange(spec.participant_count)
+        if a == b or (a, b) in seen or (b, a) in seen:
+            continue
+        seen.add((a, b))
+        seen.add((b, a))
+        requests.append(MeetingRequestPair(requester=a, target=b))
+        requests.append(MeetingRequestPair(requester=b, target=a))
+
+    # 2. Kalan talepleri tek yönlü oluştur
     # Sonsuz döngüye düşmemek için deneme sayısı sınırlı: küçük senaryolarda
     # istenen kadar farklı ikili bulunmayabilir.
     for _ in range(spec.request_count * 10):
@@ -178,6 +203,7 @@ def _build_requests(spec: ScenarioSpec, rng: random.Random) -> tuple[MeetingRequ
             continue
         seen.add((requester, target))
         requests.append(MeetingRequestPair(requester=requester, target=target))
+
     return tuple(requests)
 
 

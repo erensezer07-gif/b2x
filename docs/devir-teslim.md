@@ -224,3 +224,33 @@ belirsizleşir ve belge çürür.
 Karar verirken gerekçeyi `docs/kararlar.md`'ye yaz. Orada "şöyle yaptık"
 değil "şu ölçüldü, şu denendi, bu yüzden böyle" yazıyor — devralan kişinin
 aynı yolu ikinci kez yürümemesi için.
+
+---
+
+## 9. Sunucuya Kurulum ve Canlıya Geçiş Kontrol Listesi
+
+Sistemi gerçek bir sunucuya kurmadan ve etkinliği canlıya almadan önce aşağıdaki 6 madde sırayla doğrulanmalıdır:
+
+- [ ] **1. TLS / HTTPS Yapılandırması**
+  - **Durum:** API doğrudan düz HTTP ile dışarı açılmamalıdır. Fuar Wi-Fi ağlarında JWT jetonları şifrelenmemiş HTTP üzerinde dinlenebilir.
+  - **Eylem:** API önüne HTTPS/TLS sonlandırması yapan bir ters vekil (Tavsiye: Caddy — OTOMATİK Let's Encrypt / ZeroSSL sertifikası alır, ya da Nginx + Certbot) yerleştirin.
+
+- [ ] **2. Otomatik Veritabanı Migration'ı**
+  - **Durum:** Veritabanı şeması güncellenmeden API ayağa kalkarsa eski şema üzerinde hatalar üretir.
+  - **Eylem:** `compose.yaml` (ve `infra/docker-compose.yml`) içinde `migrate` servisinin aktif olduğunu, `api` ve `worker` servislerinin `depends_on: migrate: condition: service_completed_successfully` ile bağlı olduğunu doğrulayın.
+
+- [ ] **3. Veritabanı Yedekleme (Disaster Recovery)**
+  - **Durum:** PostgreSQL verileri Docker `pgdata` volume'undadır. Volume silindiğinde tüm katılımcı ve plan verisi kaybolur.
+  - **Eylem:** Sunucuda düzenli aralıklarla (örn. her saat başı ve etkinlik öncesi `crontab` ile) `pg_dump` çalıştıran ve yedeği sunucu dışı güvenli bir depolamaya (S3, uzak sunucu vb.) aktaran bir zamanlanmış görev tanımlayın.
+
+- [ ] **4. Sıkılaştırılmış CORS Ayarları**
+  - **Durum:** `.env` içindeki `CORS_ORIGINS` alanı `*` (yıldız) kalırsa herhangi bir zararlı web sitesi kullanıcının tarayıcısı üzerinden API'ye istek atabilir.
+  - **Eylem:** `.env` dosyasında `CORS_ORIGINS` değerine yalnızca mobil/web uygulamasının hizmet verdiği alan adlarını (örn. `https://etkinlik.example.com`) virgülle ayırarak yazın.
+
+- [ ] **5. Profil Fotoğrafları Depolama Volume'u**
+  - **Durum:** Fotoğraflar varsayılan olarak `backend/storage` dizinine kaydedilir. Konteyner silinip yeniden başlatıldığında fotoğraflar kaybolur.
+  - **Eylem:** `docker-compose.yml` içinde `backend/storage` dizinini kalıcı bir Docker Volume (`storage_data:/srv/b2x/storage`) veya sunucu bind mount dizinine bağlayın.
+
+- [ ] **6. Sistem İzleme ve Sağlık Bildirimleri**
+  - **Durum:** Sunucu çökmesi, Redis bağlantı kopması veya ARQ worker durması durumunda organizatörün haberi olmayabilir.
+  - **Eylem:** API'nin `/health/ready` uç noktasını periyodik olarak sorgulayan (örn. Uptime Kuma, Healthchecks.io veya Datadog) bir izleme servisi ve hata bildirim mekanizması (Sentry vb.) ekleyin.
