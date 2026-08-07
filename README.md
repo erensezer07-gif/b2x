@@ -6,6 +6,8 @@ Kurumsal etkinliklerde (zirve, fuar, iş forumu) katılımcıların birbiriyle t
 
 Ayrıntılı işlevsel şartname: **`B2X_SPEC.md`**
 
+Projeyi devralıyorsan: **`docs/devir-teslim.md`** — sistem haritası, dokunulmaz kurallar, bilinen sınırlar ve belirti→sebep tablosu.
+
 ## Yapı
 
 | Klasör | İçerik |
@@ -176,6 +178,23 @@ cd app
 flutter analyze
 flutter test
 ```
+
+## Demo verisi ve duman testi
+
+Sahte bir etkinliği baştan sona kurar: kayıt, profiller, başvurular, onaylar, görüşme talepleri, eşleştirme ve yayınlama — hepsi gerçek uçlardan.
+
+```
+cd backend
+python scripts/demo.py
+```
+
+Sonuna kadar gidiyorsa veritabanı, migration'lar, Redis, arka plan işçisi ve motor birlikte çalışıyor demektir. Yeni bir sunucuda kurulumu doğrulamanın en kısa yolu. Bitişte giriş bilgilerini ekrana yazar.
+
+```
+python scripts/demo.py --adres http://sunucu:8000 --katilimci 24 --tur 6
+```
+
+Her çalıştırma yeni bir etkinlik açar, var olan veriye dokunmaz. Arka plan işçisi çalışmıyorsa bunu açıkça söyler.
 
 ## Eşleştirme motorunu denemek
 
