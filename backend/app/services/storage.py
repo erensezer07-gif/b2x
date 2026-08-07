@@ -92,7 +92,8 @@ class LocalDiskStorage(Storage):
             raise StorageError(f"Dosya silinemedi: {error}") from error
 
     def public_url(self, key: str) -> str:
-        return f"{self._public_base_url}/{key}"
+        base = self._public_base_url.rstrip("/") if self._public_base_url else "https://b2x-api.onrender.com/files"
+        return f"{base}/{key}"
 
     def _resolve(self, key: str) -> Path:
         """Anahtarı disk yoluna çevirir ve kök dışına çıkışı engeller.
