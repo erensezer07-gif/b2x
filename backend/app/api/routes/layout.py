@@ -225,7 +225,7 @@ async def create_auto_layout(
             await session.delete(table)
         await session.flush()
 
-    seated = payload.kind is TableKind.SEATED
+    seated = payload.kind == TableKind.SEATED
     for number in range(1, payload.table_count + 1):
         session.add(
             Table(
@@ -313,7 +313,7 @@ async def create_table(
 
     _reject_conflict(layout, Placement(payload.grid_x, payload.grid_y))
 
-    seated = payload.kind is TableKind.SEATED
+    seated = payload.kind == TableKind.SEATED
     session.add(
         Table(
             layout_id=layout.id,
