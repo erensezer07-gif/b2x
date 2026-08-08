@@ -195,51 +195,49 @@ async def read_layout(event: OwnedEvent, session: SessionDep) -> LayoutResponse:
 async def create_auto_layout(
     payload: AutoLayoutRequest, event: OwnedEvent, session: SessionDep
 ) -> LayoutResponse:
-    """Masaları oluşturur ve 1'den başlayarak numaralandırır (M5).
+    """Masaları oluşturur ve 1'den başlayarak numaralandırır (M5)."""
+    try:
+        await _ensure_editable(session, event)
 
-    `PUT` bilinçli: çağrı mevcut düzenin **yerine geçiyor**, üstüne eklemiyor.
-    Organizatör masa sayısını değiştirdiğinde eski masalar silinip yenileri
-    kuruluyor — aksi hâlde her denemede masa birikirdi.
+        layout = await _load_layout(session, event.id)
+        if layout is None:
+            layout = Layout(event_id=event.id, mode=LayoutMode.AUTO)
+            session.add(layout)
+            await session.flush()
+        else:
+            layout.mode = LayoutMode.AUTO
+            layout.grid_width = None
+            layout.grid_height = None
+            for area in list(layout.areas):
+                await session.delete(area)
+            for table in list(layout.tables):
+                await session.delete(table)
+            await session.flush()
 
-    Plan üretilmişse reddediliyor: atamalar masa kimliğine bağlı.
-    """
-    await _ensure_editable(session, event)
-
-    layout = await _load_layout(session, event.id)
-    if layout is None:
-        # Otomatik modda ızgara yok; şemadaki CHECK kısıtı da grid alanlarının
-        # boş olmasını zorluyor (Aşama 1).
-        layout = Layout(event_id=event.id, mode=LayoutMode.AUTO)
-        session.add(layout)
-        await session.flush()
-    else:
-        layout.mode = LayoutMode.AUTO
-        # Manuel moddan dönülüyorsa ızgara temizlenmeli: `grid_matches_mode`
-        # otomatik modda bu alanların boş olmasını şart koşuyor. Alan blokları
-        # da gidiyor — otomatik modda görsel kroki yok, yerleri kalmaz.
-        layout.grid_width = None
-        layout.grid_height = None
-        for area in list(layout.areas):
-            await session.delete(area)
-        for table in list(layout.tables):
-            await session.delete(table)
-        await session.flush()
-
-    seated = payload.kind == TableKind.SEATED
-    for number in range(1, payload.table_count + 1):
-        session.add(
-            Table(
-                layout_id=layout.id,
-                number=number,
-                kind=payload.kind,
-                seat_count=payload.seat_count if seated else None,
-                min_people=None if seated else payload.min_people,
-                max_people=None if seated else payload.max_people,
+        seated = (payload.kind == TableKind.SEATED or str(payload.kind) == "seated")
+        kind_val = payload.kind.value if hasattr(payload.kind, "value") else str(payload.kind)
+        for number in range(1, payload.table_count + 1):
+            session.add(
+                Table(
+                    layout_id=layout.id,
+                    number=number,
+                    kind=kind_val,
+                    seat_count=payload.seat_count if seated else None,
+                    min_people=None if seated else payload.min_people,
+                    max_people=None if seated else payload.max_people,
+                )
             )
-        )
 
-    await session.commit()
-    return build_layout_response(await _require_layout(session, event.id))
+        await session.commit()
+        return build_layout_response(await _require_layout(session, event.id))
+    except HTTPException:
+        raise
+    except Exception as error:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Salon düzeni kurulurken hata oluştu: {error}",
+        ) from error
 
 
 @router.put("/layout/manual", summary="Manuel salon düzenine geç")
