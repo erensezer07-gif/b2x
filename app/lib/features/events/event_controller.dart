@@ -347,14 +347,16 @@ class EventActions {
     await _repository.openRegistration(eventId);
     await _refreshDetail();
     await refreshList();
+    _ref.invalidate(discoverEventsProvider);
   }
 
   /// Etkinlik listesini tazeler ve yeni verinin gelmesini bekler.
   ///
   /// Liste, kart üstünde adı, tur sayısını ve durum rozetini gösteriyor;
-  /// sihirbazda değişen her şey oraya yansımalı.
+  /// sihirbazda değişen her şey oraya yansımalı. Keşfet listesi de yenilenir.
   Future<void> refreshList() async {
     _ref.invalidate(myEventsProvider);
+    _ref.invalidate(discoverEventsProvider);
     await _ref.read(myEventsProvider.future);
   }
 

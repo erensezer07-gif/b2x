@@ -63,6 +63,15 @@ async def open_event(client: AsyncClient, **overrides) -> dict:
     }
     event = (await client.post("/events", json=body)).json()
 
+    await client.patch(
+        f"/events/{event['id']}",
+        json={
+            "venue_name": "İzmir Fuar Alanı",
+            "address": "Fuar Cad. No:1",
+            "description": "Detaylı açıklama metni",
+        },
+    )
+
     layout = await client.put(
         f"/events/{event['id']}/layout/auto",
         json={"kind": "seated", "table_count": 4, "seat_count": 6},

@@ -58,6 +58,19 @@ def build_layout_response(layout: Layout) -> LayoutResponse:
     )
 
 
+def is_event_info_complete(event: Event) -> bool:
+    """Etkinliğin zorunlu temel bilgilerinin doldurulup doldurulmadığını kontrol eder."""
+    if not event.name or not event.name.strip() or event.name.strip().lower() == "yeni etkinlik":
+        return False
+    if not event.venue_name or not event.venue_name.strip():
+        return False
+    if not event.address or not event.address.strip():
+        return False
+    if not event.description or not event.description.strip():
+        return False
+    return True
+
+
 def build_event_response(event: Event, layout: Layout | None, storage: Storage) -> EventResponse:
     """Etkinliğin tam yanıtı: alanlar, program ve kapasite özeti."""
     schedule = build_schedule(
@@ -94,7 +107,6 @@ def build_event_response(event: Event, layout: Layout | None, storage: Storage) 
         total_minutes=schedule.total_minutes,
         capacity_summary=build_capacity_summary(event, layout),
         has_layout=has_layout,
-        # Salon düzeni kurulmadan kayıtlar açılamaz (M4, Bölüm 10). Arayüz
-        # düğmeyi buna bakarak kapatıyor; asıl kapı uçta.
-        can_open_registration=has_layout,
+        # Salon düzeni kurulmadan ve temel bilgiler eksiksiz olmadan kayıtlar açılamaz (M4, Bölüm 10).
+        can_open_registration=has_layout and is_event_info_complete(event),
     )

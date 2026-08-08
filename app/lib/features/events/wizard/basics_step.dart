@@ -175,9 +175,15 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
               controller: _name,
               enabled: !_isSaving,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Etkinlik adı'),
-              validator: (value) =>
-                  (value ?? '').trim().isEmpty ? 'Etkinlik adı gerekli.' : null,
+              decoration: const InputDecoration(labelText: 'Etkinlik adı *'),
+              validator: (value) {
+                final trimmed = (value ?? '').trim();
+                if (trimmed.isEmpty) return 'Etkinlik adı gerekli.';
+                if (trimmed.toLowerCase() == 'yeni etkinlik') {
+                  return 'Lütfen geçerli bir etkinlik adı girin.';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: AppSpacing.md),
             Row(
@@ -206,16 +212,20 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
               controller: _venue,
               enabled: !_isSaving,
               decoration: const InputDecoration(
-                labelText: 'Yer',
+                labelText: 'Yer *',
                 hintText: 'İzmir Fuar Alanı',
               ),
+              validator: (value) =>
+                  (value ?? '').trim().isEmpty ? 'Yer (mekan) adı gerekli.' : null,
             ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(
               controller: _address,
               enabled: !_isSaving,
               maxLines: 2,
-              decoration: const InputDecoration(labelText: 'Adres'),
+              decoration: const InputDecoration(labelText: 'Adres *'),
+              validator: (value) =>
+                  (value ?? '').trim().isEmpty ? 'Adres gerekli.' : null,
             ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(
@@ -223,7 +233,9 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
               enabled: !_isSaving,
               maxLines: 4,
               maxLength: 1000,
-              decoration: const InputDecoration(labelText: 'Açıklama'),
+              decoration: const InputDecoration(labelText: 'Açıklama *'),
+              validator: (value) =>
+                  (value ?? '').trim().isEmpty ? 'Etkinlik açıklaması gerekli.' : null,
             ),
             const SizedBox(height: AppSpacing.md),
             _CoverPicker(

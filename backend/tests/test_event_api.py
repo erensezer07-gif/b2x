@@ -160,6 +160,10 @@ async def test_capacity_warning_does_not_block_opening(
 ) -> None:
     """*"Bu bir engel değil uyarıdır, çünkü gelmeyecekler hesaba katılabilir."*"""
     event = await create_draft(authenticated_client, capacity=500)
+    await authenticated_client.patch(
+        f"/events/{event['id']}",
+        json={"venue_name": "Fuar", "address": "Adres", "description": "Açıklama"},
+    )
     await add_layout(authenticated_client, event["id"], tables=5)
 
     response = await authenticated_client.post(f"/events/{event['id']}/open-registration")
@@ -181,10 +185,27 @@ async def test_registration_cannot_open_without_a_layout(
     assert event["can_open_registration"] is False
 
 
-async def test_registration_opens_once_a_layout_exists(
+async def test_registration_cannot_open_without_complete_info(
+    authenticated_client: AsyncClient,
+) -> None:
+    """Temel bilgiler (yer, adres, açıklama) eksikse kayıtlar açılamaz."""
+    event = await create_draft(authenticated_client)
+    await add_layout(authenticated_client, event["id"])
+
+    # Yer, adres ve açıklama eksik
+    response = await authenticated_client.post(f"/events/{event['id']}/open-registration")
+    assert response.status_code == 409
+    assert "etkinlik bilgilerini" in response.json()["detail"]
+
+
+async def test_registration_opens_once_a_layout_and_info_exist(
     authenticated_client: AsyncClient,
 ) -> None:
     event = await create_draft(authenticated_client)
+    await authenticated_client.patch(
+        f"/events/{event['id']}",
+        json={"venue_name": "İzmir Fuar Alanı", "address": "Adres 123", "description": "Detaylar"},
+    )
     await add_layout(authenticated_client, event["id"])
 
     detail = (await authenticated_client.get(f"/events/{event['id']}")).json()

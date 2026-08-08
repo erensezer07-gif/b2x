@@ -120,7 +120,10 @@ class _MyEventsTab extends ConsumerWidget {
               'Sağ alttaki düğmeyle başlayabilirsin.',
         ),
       AsyncData(:final value) => RefreshIndicator(
-          onRefresh: () async => ref.invalidate(myEventsProvider),
+          onRefresh: () async {
+            ref.invalidate(myEventsProvider);
+            ref.invalidate(discoverEventsProvider);
+          },
           child: _EventList(events: value),
         ),
     };
@@ -170,6 +173,16 @@ class _EventCard extends StatelessWidget {
               Text(_describe(event)),
               const SizedBox(height: AppSpacing.sm),
               _StatusBadge(status: event.status),
+              if (event.status == EventStatus.draft) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Kayıtlar açılınca Keşfet\'te listelenir',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

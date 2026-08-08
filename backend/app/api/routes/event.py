@@ -22,7 +22,7 @@ from app.schemas.event import (
     EventSummaryResponse,
     EventUpdateRequest,
 )
-from app.services.event import build_event_response
+from app.services.event import build_event_response, is_event_info_complete
 from app.services.storage import ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, StorageError
 
 router = APIRouter(prefix="/events", tags=["etkinlik"])
@@ -182,6 +182,12 @@ async def open_registration(
     Kapasite uyarısı ise engel değil (M4): kontenjan salondan büyük olsa bile
     kayıtlar açılabilir, çünkü gelmeyecekler hesaba katılmış olabilir.
     """
+    if not is_event_info_complete(event):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Kayıtları açmadan önce etkinlik bilgilerini (ad, yer, adres, açıklama) eksiksiz doldurmalısın.",
+        )
+
     layout = await _load_layout(session, event.id)
     if layout is None or not layout.tables:
         raise HTTPException(

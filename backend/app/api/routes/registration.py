@@ -142,12 +142,13 @@ async def discover_events(
     düğmesini uç zaten kapatıyor.
     """
     now = datetime.now(UTC)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     counts = _counts_subquery()
 
     result = await session.execute(
         select(Event, counts.c.accepted, counts.c.pending)
         .outerjoin(counts, counts.c.event_id == Event.id)
-        .where(Event.status != EventStatus.DRAFT, Event.starts_at > now)
+        .where(Event.status != EventStatus.DRAFT, Event.starts_at >= today_start)
         .order_by(Event.starts_at)
     )
     rows = result.all()

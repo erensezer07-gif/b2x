@@ -32,6 +32,7 @@ class EventCapacityStep extends ConsumerStatefulWidget {
 }
 
 class _EventCapacityStepState extends ConsumerState<EventCapacityStep> {
+  final _formKey = GlobalKey<FormState>();
   late final TextEditingController _capacity;
   late bool _autoApprove;
   late int _requestQuota;
@@ -67,6 +68,8 @@ class _EventCapacityStepState extends ConsumerState<EventCapacityStep> {
   }
 
   Future<void> _saveAndContinue() async {
+    if (!_formKey.currentState!.validate()) return;
+
     final capacity = int.tryParse(_capacity.text.trim());
     if (capacity == null || capacity < 1) {
       setState(() => _errorMessage = 'Geçerli bir kontenjan gir.');
@@ -106,19 +109,26 @@ class _EventCapacityStepState extends ConsumerState<EventCapacityStep> {
       errorMessage: _errorMessage,
       onBack: widget.onBack,
       onNext: _saveAndContinue,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: _capacity,
-            enabled: !_isSaving,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Kontenjan',
-              suffixText: 'kişi',
-              helperText: 'Salon kapasitesiyle karşılaştırması sonraki adımda',
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: _capacity,
+              enabled: !_isSaving,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Kontenjan *',
+                suffixText: 'kişi',
+                helperText: 'Salon kapasitesiyle karşılaştırması sonraki adımda',
+              ),
+              validator: (value) {
+                final cap = int.tryParse((value ?? '').trim());
+                if (cap == null || cap < 1) return 'Geçerli bir kontenjan gir (en az 1).';
+                return null;
+              },
             ),
-          ),
           const SizedBox(height: AppSpacing.md),
           OutlinedButton.icon(
             onPressed: _isSaving ? null : _pickDeadline,
@@ -182,6 +192,7 @@ class _EventCapacityStepState extends ConsumerState<EventCapacityStep> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 }
