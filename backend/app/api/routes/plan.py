@@ -38,10 +38,15 @@ from app.services.plan_editing import (
     publish,
     set_pinned,
 )
+import asyncio
+import logging
+
+from app.db import get_session_factory
 from app.services.plan_runner import (
     absentees_of,
     assignment_count,
     create_queued_plan,
+    execute_plan,
     request_counts,
     seat_changes,
     seated_participant_count,
@@ -49,10 +54,21 @@ from app.services.plan_runner import (
     unmet_requests,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/events/{event_id}", tags=["esletirme"])
 
 # İşçideki fonksiyonun adı. Kuyruk adla çalışıyor, referansla değil.
 MATCHING_JOB = "run_matching_job"
+
+
+async def _run_plan_in_background(plan_id: int) -> None:
+    """Arka plan işçisi/Redis yoksa eşleştirmeyi sunucu sürecinde çalıştırır."""
+    async with get_session_factory()() as session:
+        try:
+            await execute_plan(session, plan_id)
+        except Exception:
+            logger.exception("Sunucu içi eşleştirme plan %s için başarısız oldu.", plan_id)
 
 
 @router.get("/matching-check", summary="Çalıştırma öncesi kontrol listesi")
@@ -194,6 +210,9 @@ async def run_matching(
     plan.job_id = await queue.enqueue(MATCHING_JOB, plan.id)
     await session.commit()
 
+    if plan.job_id is None:
+        asyncio.create_task(_run_plan_in_background(plan.id))
+
     return await _to_response(session, plan)
 
 
@@ -203,12 +222,19 @@ async def list_plans(event: OwnedEvent, session: SessionDep) -> list[PlanSummary
     result = await session.execute(
         select(Plan).where(Plan.event_id == event.id).order_by(Plan.version.desc())
     )
-    return [await _to_response(session, plan) for plan in result.scalars()]
+    plans = list(result.scalars())
+    for p in plans:
+        if p.job_status == JobStatus.QUEUED:
+            asyncio.create_task(_run_plan_in_background(p.id))
+    return [await _to_response(session, p) for p in plans]
 
 
 @router.get("/plans/{plan_id}", summary="Plan ve hesabın durumu")
 async def read_plan(plan_id: int, event: OwnedEvent, session: SessionDep) -> PlanSummaryResponse:
-    return await _to_response(session, await _require_plan(session, event, plan_id))
+    plan = await _require_plan(session, event, plan_id)
+    if plan.job_status == JobStatus.QUEUED:
+        asyncio.create_task(_run_plan_in_background(plan.id))
+    return await _to_response(session, plan)
 
 
 async def _require_plan(session: SessionDep, event: OwnedEvent, plan_id: int) -> Plan:
