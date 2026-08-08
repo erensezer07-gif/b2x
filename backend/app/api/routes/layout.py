@@ -71,8 +71,13 @@ async def _has_assignments(session: SessionDep, event_id: int) -> bool:
     return (result.scalar_one() or 0) > 0
 
 
-async def _ensure_editable(session: SessionDep, event_id: int) -> None:
-    if await _has_assignments(session, event_id):
+async def _ensure_editable(session: SessionDep, event: OwnedEvent) -> None:
+    if event.status is not EventStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Kayıtları açılmış veya tamamlanmış bir etkinliğin salon düzeni değiştirilemez.",
+        )
+    if await _has_assignments(session, event.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Bu etkinlik için plan üretilmiş; salon düzeni artık değiştirilemez.",
@@ -198,7 +203,7 @@ async def create_auto_layout(
 
     Plan üretilmişse reddediliyor: atamalar masa kimliğine bağlı.
     """
-    await _ensure_editable(session, event.id)
+    await _ensure_editable(session, event)
 
     layout = await _load_layout(session, event.id)
     if layout is None:
@@ -253,7 +258,7 @@ async def create_manual_layout(
     dışarıda öğe bırakacaksa reddediliyor — sessizce silmek organizatörün
     emeğini yok etmek olurdu.
     """
-    await _ensure_editable(session, event.id)
+    await _ensure_editable(session, event)
 
     layout = await _load_layout(session, event.id)
     if layout is None:
@@ -303,7 +308,7 @@ async def create_table(
     payload: TableCreateRequest, event: OwnedEvent, session: SessionDep
 ) -> LayoutResponse:
     """*"Araç çubuğundan tip seçilir, tuvale dokunulur, masa oraya konur."*"""
-    await _ensure_editable(session, event.id)
+    await _ensure_editable(session, event)
     layout = await _require_manual_layout(session, event.id)
 
     _reject_conflict(layout, Placement(payload.grid_x, payload.grid_y))
@@ -342,7 +347,7 @@ async def update_table(
     """
     layout = await _require_layout(session, event.id)
     table = _find_table(layout, table_id)
-    await _ensure_editable(session, event.id)
+    await _ensure_editable(session, event)
 
     changes = payload.model_dump(exclude_unset=True)
 
@@ -376,7 +381,7 @@ async def update_table(
 async def delete_table(table_id: int, event: OwnedEvent, session: SessionDep) -> LayoutResponse:
     layout = await _require_layout(session, event.id)
     table = _find_table(layout, table_id)
-    await _ensure_editable(session, event.id)
+    await _ensure_editable(session, event)
 
     await session.delete(table)
     await session.commit()
@@ -395,7 +400,7 @@ async def create_area(
 
     Eşleştirmeye hiç girmez (Bölüm 6); kapasiteye de sayılmaz.
     """
-    await _ensure_editable(session, event.id)
+    await _ensure_editable(session, event)
     layout = await _require_manual_layout(session, event.id)
 
     _reject_conflict(
@@ -425,7 +430,7 @@ async def update_area(
 ) -> LayoutResponse:
     layout = await _require_layout(session, event.id)
     area = _find_area(layout, area_id)
-    await _ensure_editable(session, event.id)
+    await _ensure_editable(session, event)
 
     changes = payload.model_dump(exclude_unset=True)
     current = area_placement(area)
@@ -449,7 +454,7 @@ async def update_area(
 async def delete_area(area_id: int, event: OwnedEvent, session: SessionDep) -> LayoutResponse:
     layout = await _require_layout(session, event.id)
     area = _find_area(layout, area_id)
-    await _ensure_editable(session, event.id)
+    await _ensure_editable(session, event)
 
     await session.delete(area)
     await session.commit()

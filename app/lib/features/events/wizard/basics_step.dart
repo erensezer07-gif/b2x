@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../profile/wizard/wizard_step.dart';
 import '../event_controller.dart';
@@ -129,6 +130,10 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
   }
 
   Future<void> _saveAndContinue() async {
+    if (widget.event.status != EventStatus.draft) {
+      widget.onCompleted();
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -157,6 +162,8 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
     // Kapak yüklendikten sonra güncel hâli denetleyiciden geliyor.
     final event =
         ref.watch(eventDetailProvider(widget.event.id)).asData?.value ?? widget.event;
+    final isEditable = widget.event.status == EventStatus.draft;
+    final canEdit = !_isSaving && isEditable;
 
     return WizardStepScaffold(
       stepIndex: widget.stepIndex,
@@ -173,7 +180,7 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
           children: [
             TextFormField(
               controller: _name,
-              enabled: !_isSaving,
+              enabled: canEdit,
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(labelText: 'Etkinlik adı *'),
               validator: (value) {
@@ -190,7 +197,7 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _isSaving ? null : _pickDate,
+                    onPressed: canEdit ? _pickDate : null,
                     icon: const Icon(Icons.calendar_today_outlined),
                     label: Text(
                       '${_startsAt.day}.${_startsAt.month}.${_startsAt.year}',
@@ -200,7 +207,7 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _isSaving ? null : _pickTime,
+                    onPressed: canEdit ? _pickTime : null,
                     icon: const Icon(Icons.schedule_outlined),
                     label: Text(formatTime(_startsAt)),
                   ),
@@ -210,7 +217,7 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
             const SizedBox(height: AppSpacing.md),
             TextFormField(
               controller: _venue,
-              enabled: !_isSaving,
+              enabled: canEdit,
               decoration: const InputDecoration(
                 labelText: 'Yer *',
                 hintText: 'İzmir Fuar Alanı',
@@ -221,7 +228,7 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
             const SizedBox(height: AppSpacing.md),
             TextFormField(
               controller: _address,
-              enabled: !_isSaving,
+              enabled: canEdit,
               maxLines: 2,
               decoration: const InputDecoration(labelText: 'Adres *'),
               validator: (value) =>
@@ -230,7 +237,7 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
             const SizedBox(height: AppSpacing.md),
             TextFormField(
               controller: _description,
-              enabled: !_isSaving,
+              enabled: canEdit,
               maxLines: 4,
               maxLength: 1000,
               decoration: const InputDecoration(labelText: 'Açıklama *'),
@@ -240,7 +247,7 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
             const SizedBox(height: AppSpacing.md),
             _CoverPicker(
               coverUrl: event.coverUrl,
-              enabled: !_isSaving,
+              enabled: canEdit,
               onPick: _pickCover,
               onRemove: () =>
                   ref.read(eventActionsProvider(widget.event.id)).removeCover(),
@@ -250,6 +257,15 @@ class _EventBasicsStepState extends ConsumerState<EventBasicsStep> {
       ),
     );
   }
+}
+
+String? _resolveCoverUrl(String? url) {
+  if (url == null || url.trim().isEmpty) return null;
+  if (url.startsWith('http://localhost:8000') || url.startsWith('http://127.0.0.1:8000')) {
+    final path = Uri.parse(url).path;
+    return '${AppConfig.apiBaseUrl}$path';
+  }
+  return url;
 }
 
 class _CoverPicker extends StatelessWidget {
@@ -268,6 +284,7 @@ class _CoverPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final resolvedUrl = _resolveCoverUrl(coverUrl);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -280,10 +297,10 @@ class _CoverPicker extends StatelessWidget {
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(AppSpacing.sm),
-              image: coverUrl == null
+              image: resolvedUrl == null
                   ? null
                   : DecorationImage(
-                      image: NetworkImage(coverUrl!),
+                      image: NetworkImage(resolvedUrl),
                       fit: BoxFit.cover,
                       // Adres kırıksa simge kalır, ekran çökmez.
                       onError: (_, _) {},

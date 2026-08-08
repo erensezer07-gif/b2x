@@ -105,6 +105,12 @@ async def update_event(
     Yalnızca gönderilen alanlar değişiyor — bir adımı kaydetmek diğerinin
     verisini silmiyor.
     """
+    if event.status is not EventStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Kayıtları açılmış veya tamamlanmış bir etkinlikte değişiklik yapılamaz.",
+        )
+
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(event, field, value)
 
@@ -119,6 +125,12 @@ async def upload_cover(
     storage: StorageDep,
     file: Annotated[UploadFile, File(description="JPEG, PNG veya WebP")],
 ) -> EventResponse:
+    if event.status is not EventStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Kayıtları açılmış veya tamamlanmış bir etkinlikte değişiklik yapılamaz.",
+        )
+
     content_type = (file.content_type or "").split(";")[0].strip().lower()
     if content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -160,6 +172,12 @@ async def upload_cover(
 async def delete_cover(
     event: OwnedEvent, session: SessionDep, storage: StorageDep
 ) -> EventResponse:
+    if event.status is not EventStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Kayıtları açılmış veya tamamlanmış bir etkinlikte değişiklik yapılamaz.",
+        )
+
     key = event.cover_image_key
     event.cover_image_key = None
     await session.commit()

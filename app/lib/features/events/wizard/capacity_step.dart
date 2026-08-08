@@ -68,6 +68,10 @@ class _EventCapacityStepState extends ConsumerState<EventCapacityStep> {
   }
 
   Future<void> _saveAndContinue() async {
+    if (widget.event.status != EventStatus.draft) {
+      widget.onCompleted();
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
 
     final capacity = int.tryParse(_capacity.text.trim());
@@ -99,6 +103,7 @@ class _EventCapacityStepState extends ConsumerState<EventCapacityStep> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final canEdit = !_isSaving && (widget.event.status == EventStatus.draft);
 
     return WizardStepScaffold(
       stepIndex: widget.stepIndex,
@@ -116,7 +121,7 @@ class _EventCapacityStepState extends ConsumerState<EventCapacityStep> {
           children: [
             TextFormField(
               controller: _capacity,
-              enabled: !_isSaving,
+              enabled: canEdit,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'Kontenjan *',
@@ -131,7 +136,7 @@ class _EventCapacityStepState extends ConsumerState<EventCapacityStep> {
             ),
           const SizedBox(height: AppSpacing.md),
           OutlinedButton.icon(
-            onPressed: _isSaving ? null : _pickDeadline,
+            onPressed: canEdit ? _pickDeadline : null,
             icon: const Icon(Icons.event_busy_outlined),
             label: Text(
               _deadline == null
@@ -141,13 +146,13 @@ class _EventCapacityStepState extends ConsumerState<EventCapacityStep> {
           ),
           if (_deadline != null)
             TextButton(
-              onPressed: _isSaving ? null : () => setState(() => _deadline = null),
+              onPressed: canEdit ? () => setState(() => _deadline = null) : null,
               child: const Text('Son tarihi kaldır'),
             ),
           const SizedBox(height: AppSpacing.md),
           SwitchListTile(
             value: _autoApprove,
-            onChanged: _isSaving ? null : (value) => setState(() => _autoApprove = value),
+            onChanged: canEdit ? (value) => setState(() => _autoApprove = value) : null,
             contentPadding: EdgeInsets.zero,
             title: const Text('Başvuruları otomatik kabul et'),
             subtitle: Text(
@@ -175,9 +180,9 @@ class _EventCapacityStepState extends ConsumerState<EventCapacityStep> {
                   max: 10,
                   divisions: 10,
                   label: '$_requestQuota',
-                  onChanged: _isSaving
-                      ? null
-                      : (value) => setState(() => _requestQuota = value.round()),
+                  onChanged: canEdit
+                      ? (value) => setState(() => _requestQuota = value.round())
+                      : null,
                 ),
               ),
               SizedBox(

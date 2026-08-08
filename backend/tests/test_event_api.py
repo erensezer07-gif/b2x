@@ -290,3 +290,29 @@ async def test_organiser_can_delete_event(
 
     get_resp = await authenticated_client.get(f"/events/{event['id']}")
     assert get_resp.status_code == 404
+
+
+async def test_cannot_update_event_after_registration_open(
+    authenticated_client: AsyncClient,
+) -> None:
+    """Kayıtları açılmış etkinlik güncellenemez."""
+    event = await create_draft(authenticated_client)
+    await authenticated_client.patch(
+        f"/events/{event['id']}",
+        json={
+            "venue_name": "İzmir Fuarı",
+            "address": "Alsancak",
+            "description": "Detaylı açıklama",
+        },
+    )
+    await authenticated_client.put(
+        f"/events/{event['id']}/layout/auto",
+        json={"kind": "seated", "table_count": 2, "seat_count": 6},
+    )
+    await authenticated_client.post(f"/events/{event['id']}/open-registration")
+
+    patch_resp = await authenticated_client.patch(
+        f"/events/{event['id']}",
+        json={"name": "Yeni Ad Değiştirilemez"},
+    )
+    assert patch_resp.status_code == 409

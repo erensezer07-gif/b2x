@@ -90,7 +90,7 @@ class _EventWizardScreenState extends ConsumerState<EventWizardScreen> {
   }
 
   Widget _buildStep(EventDetail event) {
-    return switch (_stepIndex) {
+    final stepWidget = switch (_stepIndex) {
       0 => EventBasicsStep(
           key: const ValueKey('event-basics'),
           event: event,
@@ -123,5 +123,23 @@ class _EventWizardScreenState extends ConsumerState<EventWizardScreen> {
           onBack: _back,
         ),
     };
+
+    if (event.status == EventStatus.draft) {
+      return stepWidget;
+    }
+
+    return Column(
+      children: [
+        MaterialBanner(
+          content: const Text(
+            'Bu etkinliğin kayıtları açıldığı için bilgileri değiştirilemez.',
+          ),
+          leading: const Icon(Icons.lock_outline),
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+          actions: const [SizedBox.shrink()],
+        ),
+        Expanded(child: stepWidget),
+      ],
+    );
   }
 }

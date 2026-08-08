@@ -54,6 +54,10 @@ class _EventScheduleStepState extends ConsumerState<EventScheduleStep> {
   }
 
   Future<void> _saveAndContinue() async {
+    if (widget.event.status != EventStatus.draft) {
+      widget.onCompleted();
+      return;
+    }
     setState(() {
       _isSaving = true;
       _errorMessage = null;
@@ -75,6 +79,7 @@ class _EventScheduleStepState extends ConsumerState<EventScheduleStep> {
 
   @override
   Widget build(BuildContext context) {
+    final canEdit = !_isSaving && (widget.event.status == EventStatus.draft);
     final preview = buildSchedule(
       startsAt: widget.event.startsAt,
       slotDurationMinutes: _slotDuration,
@@ -102,7 +107,7 @@ class _EventScheduleStepState extends ConsumerState<EventScheduleStep> {
             minimum: 1,
             maximum: 20,
             suffix: 'tur',
-            enabled: !_isSaving,
+            enabled: canEdit,
             onChanged: (value) => setState(() => _slotCount = value),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -113,7 +118,7 @@ class _EventScheduleStepState extends ConsumerState<EventScheduleStep> {
             maximum: 120,
             step: 1,
             suffix: 'dakika',
-            enabled: !_isSaving,
+            enabled: canEdit,
             onChanged: (value) => setState(() => _slotDuration = value),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -124,7 +129,7 @@ class _EventScheduleStepState extends ConsumerState<EventScheduleStep> {
             maximum: 60,
             step: 1,
             suffix: 'dakika',
-            enabled: !_isSaving,
+            enabled: canEdit,
             onChanged: (value) => setState(() => _breakDuration = value),
           ),
           const SizedBox(height: AppSpacing.lg),
