@@ -202,6 +202,23 @@ async def open_registration(
     return await _respond(session, event, storage)
 
 
+@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Etkinliği sil")
+async def delete_event(
+    event: OwnedEvent, session: SessionDep, storage: StorageDep
+) -> None:
+    """Organizatörün kendi etkinliğini silmesi.
+
+    Varsa kapak görseli depodan temizlenir; veritabanı ilişkileri (düzen, masalar vb.)
+    otomatik silinir.
+    """
+    key = event.cover_image_key
+    await session.delete(event)
+    await session.commit()
+
+    if key:
+        await _delete_quietly(storage, key)
+
+
 async def _delete_quietly(storage: StorageDep, key: str) -> None:
     """Artık kullanılmayan dosyayı siler; başarısız olursa isteği düşürmez."""
     try:

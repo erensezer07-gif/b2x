@@ -350,6 +350,13 @@ class EventActions {
     _ref.invalidate(discoverEventsProvider);
   }
 
+  /// Etkinliği siler.
+  Future<void> deleteEvent() async {
+    await _repository.deleteEvent(eventId);
+    _ref.invalidate(myEventsProvider);
+    _ref.invalidate(discoverEventsProvider);
+  }
+
   /// Etkinlik listesini tazeler ve yeni verinin gelmesini bekler.
   ///
   /// Liste, kart üstünde adı, tur sayısını ve durum rozetini gösteriyor;

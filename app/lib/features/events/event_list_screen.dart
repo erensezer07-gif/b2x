@@ -151,13 +151,51 @@ class _EventList extends StatelessWidget {
   }
 }
 
-class _EventCard extends StatelessWidget {
+class _EventCard extends ConsumerWidget {
   const _EventCard({required this.event});
 
   final EventSummary event;
 
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Etkinliği sil?'),
+        content: Text(
+          '"${event.name}" etkinliğini silmek istediğine emin misin? Bu işlem geri alınamaz.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await ref.read(eventActionsProvider(event.id)).deleteEvent();
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Etkinlik silindi.')),
+        );
+      } on ApiException catch (error) {
+        messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
     return Card(
@@ -186,32 +224,35 @@ class _EventCard extends StatelessWidget {
             ],
           ),
         ),
-        // Kart sihirbaza götürüyor; bu düğmeler organizatörün diğer iki
-        // ekranına. Kayıtlar açılmadan ikisi de anlamsız, o yüzden taslakta
-        // yalnızca ok var.
-        trailing: event.status == EventStatus.draft
-            ? const Icon(Icons.chevron_right)
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.how_to_reg_outlined),
-                    tooltip: 'Başvurular',
-                    onPressed: () => context.goNamed(
-                      RegistrationsScreen.routeName,
-                      pathParameters: {'eventId': '${event.id}'},
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.auto_awesome_outlined),
-                    tooltip: 'Eşleştirme',
-                    onPressed: () => context.goNamed(
-                      MatchingScreen.routeName,
-                      pathParameters: {'eventId': '${event.id}'},
-                    ),
-                  ),
-                ],
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Sil',
+              onPressed: () => _confirmDelete(context, ref),
+            ),
+            if (event.status != EventStatus.draft) ...[
+              IconButton(
+                icon: const Icon(Icons.how_to_reg_outlined),
+                tooltip: 'Başvurular',
+                onPressed: () => context.goNamed(
+                  RegistrationsScreen.routeName,
+                  pathParameters: {'eventId': '${event.id}'},
+                ),
               ),
+              IconButton(
+                icon: const Icon(Icons.auto_awesome_outlined),
+                tooltip: 'Eşleştirme',
+                onPressed: () => context.goNamed(
+                  MatchingScreen.routeName,
+                  pathParameters: {'eventId': '${event.id}'},
+                ),
+              ),
+            ] else
+              const Icon(Icons.chevron_right),
+          ],
+        ),
         onTap: () => context.goNamed(
           EventWizardScreen.routeName,
           pathParameters: {'eventId': '${event.id}'},

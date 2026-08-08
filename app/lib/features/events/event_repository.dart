@@ -44,6 +44,11 @@ class EventRepository {
     );
   }
 
+  /// Etkinliği siler.
+  Future<void> deleteEvent(int eventId) async {
+    await _api.delete('/events/$eventId');
+  }
+
   Future<EventDetail> uploadCover({
     required int eventId,
     required List<int> bytes,

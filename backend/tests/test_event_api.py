@@ -277,3 +277,16 @@ async def test_deadline_can_be_set(authenticated_client: AsyncClient) -> None:
 
     assert updated["registration_deadline"].startswith("2026-09-12")
     assert updated["auto_approve_registrations"] is False
+
+
+async def test_organiser_can_delete_event(
+    authenticated_client: AsyncClient,
+) -> None:
+    """Organizatör kendi etkinliğini silebilmeli."""
+    event = await create_draft(authenticated_client)
+
+    response = await authenticated_client.delete(f"/events/{event['id']}")
+    assert response.status_code == 204
+
+    get_resp = await authenticated_client.get(f"/events/{event['id']}")
+    assert get_resp.status_code == 404
