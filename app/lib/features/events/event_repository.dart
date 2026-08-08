@@ -314,6 +314,10 @@ class EventRepository {
     );
   }
 
+  Future<void> deletePlan(int eventId, int planId) async {
+    await _api.delete('/events/$eventId/plans/$planId');
+  }
+
   // --- Plan önizleme ve elle düzeltme (M7) -----------------------------------
 
   /// Bir turun masaları ve oturanları. Boş masalar da geliyor.

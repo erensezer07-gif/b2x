@@ -79,6 +79,48 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
     }
   }
 
+  Future<void> _deletePlan(int planId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eşleştirmeyi İptal Et / Sil'),
+        content: const Text(
+          'Bu eşleştirme çalışmasını iptal edip silmek istediğinize emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('İptal Et / Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(matchingActionsProvider(widget.eventId)).deletePlan(planId);
+      if (mounted) {
+        setState(() {
+          if (_plan?.id == planId) _plan = null;
+        });
+      }
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
+    }
+  }
+
   void _openPlan(int planId) {
     context.goNamed(
       PlanScreen.routeName,
@@ -168,6 +210,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
             _PlanCard(
               plan: current,
               onOpen: () => _openPlan(current.id),
+              onDelete: current.isPublished ? null : () => _deletePlan(current.id),
               // *"Organizatör 'planı güncelle' der."* (M10) Yalnızca
               // check-in başladıysa anlamlı; kapı sunucuda.
               onRefresh: (check.acceptedCount > 0 && current.hasResult)
@@ -183,6 +226,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
               _HistoryRow(
                 plan: plan,
                 onOpen: plan.hasResult ? () => _openPlan(plan.id) : null,
+                onDelete: plan.isPublished ? null : () => _deletePlan(plan.id),
               ),
           ],
         ],
@@ -339,13 +383,19 @@ class _RunButton extends StatelessWidget {
 
 /// Çalışan veya bitmiş planın durumu ve özeti.
 class _PlanCard extends StatelessWidget {
-  const _PlanCard({required this.plan, required this.onOpen, this.onRefresh});
+  const _PlanCard({
+    required this.plan,
+    required this.onOpen,
+    this.onRefresh,
+    this.onDelete,
+  });
 
   final PlanSummary plan;
   final VoidCallback onOpen;
 
   /// *"Gelmeyenler çıkarılmış halde tekrar çalıştır."* (M10, 9.8)
   final VoidCallback? onRefresh;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -441,6 +491,21 @@ class _PlanCard extends StatelessWidget {
                 ),
               ],
             ],
+            if (onDelete != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: onDelete,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: colors.error,
+                ),
+                icon: const Icon(Icons.delete_outline),
+                label: Text(
+                  plan.isPending
+                      ? 'Eşleştirmeyi İptal Et / Durdur'
+                      : 'Bu Plan Versiyonunu Sil',
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -499,12 +564,17 @@ class _Summary extends StatelessWidget {
 }
 
 class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({required this.plan, required this.onOpen});
+  const _HistoryRow({
+    required this.plan,
+    required this.onOpen,
+    this.onDelete,
+  });
 
   final PlanSummary plan;
 
   /// Hesabı bitmemiş plan açılamaz — gösterilecek bir şey yok.
   final VoidCallback? onOpen;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -541,6 +611,12 @@ class _HistoryRow extends StatelessWidget {
                 color: colors.onSurfaceVariant,
               ),
             ),
+            if (onDelete != null)
+              IconButton(
+                icon: Icon(Icons.delete_outline, color: colors.error, size: 20),
+                tooltip: 'Versiyonu sil',
+                onPressed: onDelete,
+              ),
           ],
         ),
       ),

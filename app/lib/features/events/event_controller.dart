@@ -519,6 +519,12 @@ class MatchingActions {
     _ref.invalidate(eventPlansProvider(eventId));
     return plan;
   }
+
+  Future<void> deletePlan(int planId) async {
+    await _repository.deletePlan(eventId, planId);
+    _ref.invalidate(eventPlansProvider(eventId));
+    _ref.invalidate(matchingCheckProvider(eventId));
+  }
 }
 
 final matchingActionsProvider =

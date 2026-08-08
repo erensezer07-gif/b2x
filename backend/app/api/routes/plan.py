@@ -182,17 +182,14 @@ async def run_matching(
             detail="Eşleştirme için en az iki kabul edilmiş katılımcı ve bir masa gerekiyor.",
         )
 
-    running = await session.execute(
+    running_plans = await session.execute(
         select(Plan).where(
             Plan.event_id == event.id,
             Plan.job_status.in_([JobStatus.QUEUED, JobStatus.RUNNING]),
         )
     )
-    if running.scalars().first() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Bu etkinlik için bir eşleştirme zaten çalışıyor.",
-        )
+    for stuck in running_plans.scalars():
+        await execute_plan(session, stuck.id)
 
     if payload.minimal_change and not await has_check_in(session, event.id):
         raise HTTPException(
@@ -205,15 +202,11 @@ async def run_matching(
     )
     await session.commit()
 
-    # Kuyruk ulaşılamazsa `None` dönüyor ve plan `queued` kalıyor; ayrıntı
-    # `app/services/queue.py` içinde.
-    plan.job_id = await queue.enqueue(MATCHING_JOB, plan.id)
-    await session.commit()
+    # Sunucu içinde doğrudan motoru çalıştırıyoruz (anında sonuç verir ve kuyrukta takılmayı önler).
+    await execute_plan(session, plan.id)
 
-    if plan.job_id is None:
-        asyncio.create_task(_run_plan_in_background(plan.id))
-
-    return await _to_response(session, plan)
+    fresh_plan = await session.get(Plan, plan.id)
+    return await _to_response(session, fresh_plan or plan)
 
 
 @router.get("/plans", summary="Plan versiyonları")
@@ -224,17 +217,41 @@ async def list_plans(event: OwnedEvent, session: SessionDep) -> list[PlanSummary
     )
     plans = list(result.scalars())
     for p in plans:
-        if p.job_status == JobStatus.QUEUED:
-            asyncio.create_task(_run_plan_in_background(p.id))
-    return [await _to_response(session, p) for p in plans]
+        if p.job_status in (JobStatus.QUEUED, JobStatus.RUNNING):
+            await execute_plan(session, p.id)
+
+    result = await session.execute(
+        select(Plan).where(Plan.event_id == event.id).order_by(Plan.version.desc())
+    )
+    return [await _to_response(session, p) for p in result.scalars()]
 
 
 @router.get("/plans/{plan_id}", summary="Plan ve hesabın durumu")
 async def read_plan(plan_id: int, event: OwnedEvent, session: SessionDep) -> PlanSummaryResponse:
     plan = await _require_plan(session, event, plan_id)
-    if plan.job_status == JobStatus.QUEUED:
-        asyncio.create_task(_run_plan_in_background(plan.id))
+    if plan.job_status in (JobStatus.QUEUED, JobStatus.RUNNING):
+        await execute_plan(session, plan.id)
+        plan = await _require_plan(session, event, plan_id)
     return await _to_response(session, plan)
+
+
+@router.delete(
+    "/plans/{plan_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Planı veya eşleştirme çalışmasını sil/iptal et",
+)
+async def delete_plan(
+    plan_id: int, event: OwnedEvent, session: SessionDep
+) -> None:
+    """Planı veya iptal edilmek istenen çalışmayı siler."""
+    plan = await _require_plan(session, event, plan_id)
+    if plan.status == PlanStatus.PUBLISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Yayınlanmış bir plan silinemez.",
+        )
+    await session.delete(plan)
+    await session.commit()
 
 
 async def _require_plan(session: SessionDep, event: OwnedEvent, plan_id: int) -> Plan:
