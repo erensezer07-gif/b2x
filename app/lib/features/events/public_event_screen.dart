@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/state_views.dart';
 import '../profile/models.dart';
@@ -43,6 +44,15 @@ class _PublicEventScreenState extends ConsumerState<PublicEventScreen> {
   /// paylaşılan hatayı görüp kullanıcıyı başka sayfaya atardı (Aşama 3).
   List<ProfileRequirement> _missing = const [];
   String? _error;
+
+  String? _resolveCoverUrl(String? url) {
+    if (url == null || url.trim().isEmpty) return null;
+    if (url.startsWith('http://localhost:8000') || url.startsWith('http://127.0.0.1:8000')) {
+      final path = Uri.parse(url).path;
+      return '${AppConfig.apiBaseUrl}$path';
+    }
+    return url;
+  }
 
   Future<void> _run(Future<void> Function() action) async {
     setState(() {
@@ -93,16 +103,18 @@ class _PublicEventScreenState extends ConsumerState<PublicEventScreen> {
   Widget _buildDetail(PublicEvent event) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final coverUrl = _resolveCoverUrl(event.coverUrl);
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
       children: [
-        if (event.coverUrl != null)
+        if (coverUrl != null)
           ClipRRect(
             borderRadius: BorderRadius.circular(AppSpacing.sm),
             child: Image.network(
-              event.coverUrl!,
-              height: 160,
+              coverUrl,
+              height: 180,
+              width: double.infinity,
               fit: BoxFit.cover,
               // Görsel gelmezse ekran çökmemeli; başlık zaten altında.
               errorBuilder: (context, _, _) => const SizedBox.shrink(),
