@@ -8,7 +8,13 @@
 
 Kurumsal etkinliklerde (zirve, fuar, iş forumu) katılımcıların birbiriyle tanışması genelde tesadüfe kalır. **B2X** bunu matematiksel ve planlı hale getirir: katılımcı profillerini, sektör hedeflerini ve beklentilerini karşılaştırarak her görüşme turu için **kimin hangi masada kiminle oturacağını** çakışmasız olarak hesaplar.
 
-![B2X Platform Önizlemesi](assets/b2x_preview.png)
+## 📸 Uygulama Ekran Görüntüleri
+
+### 1. İnteraktif Salon Düzeni Editörü (`LayoutEditorScreen`)
+![Salon Düzeni Editörü](screenshots/1_salon_editoru.png)
+
+### 2. Çok Turlu Oturma Planı ve Manuel Takas Ekranı (`PlanScreen`)
+![Oturma Planı ve Manuel Takas](screenshots/2_oturma_plani.png)
 
 ---
 
